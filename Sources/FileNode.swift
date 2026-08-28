@@ -24,3 +24,21 @@ struct FileNode: Identifiable, Hashable {
         return "doc.fill"
     }
 }
+
+struct FileTreeMoveAvailability {
+    let up: Bool
+    let down: Bool
+
+    static let none = FileTreeMoveAvailability(up: false, down: false)
+}
+
+/// Computes move-menu state once for a tree level. Passing a map to each row keeps rendering
+/// linear in the number of siblings instead of filtering the same array for every row.
+func fileTreeMoveAvailabilities(for siblings: [FileNode]) -> [URL: FileTreeMoveAvailability] {
+    let documents = siblings.filter { !$0.isDirectory }
+    return documents.enumerated().reduce(into: [URL: FileTreeMoveAvailability]()) { result, item in
+        result[item.element.url] = FileTreeMoveAvailability(
+            up: item.offset > 0,
+            down: item.offset + 1 < documents.count)
+    }
+}

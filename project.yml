@@ -1,4 +1,4 @@
-name: MarkdownVault
+name: ClipNest
 options:
   bundleIdPrefix: com.tertiaryinfotech
   createIntermediateGroups: true
@@ -15,7 +15,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
     GENERATE_INFOPLIST_FILE: YES
-    INFOPLIST_KEY_CFBundleDisplayName: "Tertiary Markdown"
+    INFOPLIST_KEY_CFBundleDisplayName: "ClipNest"
     INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Tertiary Infotech Academy Pte Ltd"
     INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.productivity"
 
@@ -25,7 +25,7 @@ packages:
     from: "1.2.0"
 
 targets:
-  MarkdownVault:
+  ClipNest:
     type: application
     supportedDestinations: [iOS, macOS]
     deploymentTarget:
@@ -39,8 +39,8 @@ targets:
       - package: SwiftTerm
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tertiaryinfotech.markdownapp
-        PRODUCT_NAME: "Markdown Vault"
+        PRODUCT_BUNDLE_IDENTIFIER: com.tertiaryinfotech.clipnest
+        PRODUCT_NAME: "ClipNest"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: Sources/Info.plist
@@ -53,3 +53,26 @@ targets:
       path: Sources/MarkdownVault.entitlements
       properties:
         com.apple.security.app-sandbox: false
+
+  ClipNestTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Tests
+    dependencies:
+      - target: ClipNest
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tertiaryinfotech.clipnest.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ClipNest.app/Contents/MacOS/ClipNest"
+
+schemes:
+  ClipNest:
+    build:
+      targets:
+        ClipNest: all
+    test:
+      config: Debug
+      targets:
+        - name: ClipNestTests

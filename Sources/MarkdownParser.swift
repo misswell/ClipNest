@@ -1,7 +1,7 @@
 import Foundation
 
 /// A renderable block of markdown.
-enum MarkdownBlock {
+enum MarkdownBlock: Sendable {
     case heading(level: Int, text: String)
     case paragraph(String)
     case bulleted([String])

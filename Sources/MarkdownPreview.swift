@@ -5,53 +5,66 @@ struct MarkdownPreview: View {
     let markdown: String
     /// Resolve an image reference (`src`) to an on-disk URL relative to the current file.
     var resolveImage: (String) -> URL?
+    /// Optional file/vault context. When supplied, image lookup runs off the main actor,
+    /// including the Obsidian-style whole-vault fallback search.
+    var documentURL: URL? = nil
+    var vaultRootURL: URL? = nil
     /// Called with the document-wide checkbox index when a checklist box is tapped
     /// (Obsidian-style live toggling). When nil, checkboxes are read-only.
     var onToggleCheckbox: ((Int) -> Void)? = nil
 
-    private var blocks: [MarkdownBlock] { MarkdownParser.parse(markdown) }
-
-    /// Each block paired with the running count of checkboxes that precede it, so a tapped
-    /// box maps back to the Nth `- [ ]` line in the source.
-    private var renderItems: [(block: MarkdownBlock, checkboxStart: Int)] {
-        var result: [(MarkdownBlock, Int)] = []
-        var cb = 0
-        for b in blocks {
-            result.append((b, cb))
-            if case let .checklist(items) = b { cb += items.count }
-        }
-        return result
-    }
+    @State private var renderItems: [MarkdownRenderItem] = []
+    @State private var isParsing = true
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(renderItems.enumerated()), id: \.offset) { _, item in
-                    view(for: item.block, checkboxStart: item.checkboxStart)
+        Group {
+            if isParsing {
+                ProgressView("正在渲染预览…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(renderItems) { item in
+                            view(for: item.block, checkboxStart: item.checkboxStart)
+                        }
+                    }
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
                 }
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .textSelection(.enabled)
         }
         .background(Theme.background)
+        .task(id: markdown) {
+            isParsing = true
+            renderItems = []
+            let source = markdown
+            let rendered = await Task.detached(priority: .utility) {
+                MarkdownPreviewRenderer.render(source)
+            }.value
+            // A detached parser does not inherit cancellation. The owning SwiftUI task
+            // still tells us whether a newer edit replaced this render request.
+            guard !Task.isCancelled else { return }
+            renderItems = rendered
+            isParsing = false
+        }
     }
 
     @ViewBuilder
-    private func view(for block: MarkdownBlock, checkboxStart: Int = 0) -> some View {
+    private func view(for block: MarkdownRenderBlock, checkboxStart: Int = 0) -> some View {
         switch block {
         case let .heading(level, text):
-            inline(text).font(headingFont(level)).bold().padding(.top, level <= 2 ? 6 : 2)
+            Text(text).font(headingFont(level)).bold().padding(.top, level <= 2 ? 6 : 2)
 
         case let .paragraph(text):
-            inline(text)
+            Text(text)
 
         case let .bulleted(items):
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(items.indices, id: \.self) { idx in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•").foregroundStyle(Theme.accent)
-                        inline(items[idx])
+                        Text(items[idx])
                     }
                 }
             }
@@ -61,7 +74,7 @@ struct MarkdownPreview: View {
                 ForEach(items.indices, id: \.self) { idx in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("\(idx + 1).").foregroundStyle(Theme.accent).monospacedDigit()
-                        inline(items[idx])
+                        Text(items[idx])
                     }
                 }
             }
@@ -78,7 +91,7 @@ struct MarkdownPreview: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(onToggleCheckbox == nil)
-                        inline(items[idx].text)
+                        Text(items[idx].text)
                             .strikethrough(items[idx].done, color: Theme.mutedInk)
                             .foregroundStyle(items[idx].done ? Theme.mutedInk : Theme.ink)
                     }
@@ -97,7 +110,7 @@ struct MarkdownPreview: View {
         case let .quote(text):
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 2).fill(Theme.accent).frame(width: 4)
-                inline(text).foregroundStyle(Theme.mutedInk).italic()
+                Text(text).foregroundStyle(Theme.mutedInk).italic()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
@@ -127,11 +140,16 @@ struct MarkdownPreview: View {
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            } else if let url = resolveImage(src),
-                      let data = try? Data(contentsOf: url),
-                      let img = Image(platformData: data) {
-                img.resizable().scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else if vaultRootURL != nil {
+                // The fallback filename search can walk a large vault. Keep it out of
+                // SwiftUI body evaluation and let the image row resolve it asynchronously.
+                LocalMarkdownImageView(source: src,
+                                       documentURL: documentURL,
+                                       vaultRootURL: vaultRootURL)
+            } else if let url = resolveImage(src) {
+                // Preserve the lightweight standalone-preview behavior when no vault
+                // context is available.
+                LocalMarkdownImageView(url: url, source: src)
             } else {
                 imagePlaceholder(src)
             }
@@ -163,20 +181,178 @@ struct MarkdownPreview: View {
         }
     }
 
-    /// Render inline markdown (bold/italic/links/code) per line via AttributedString.
-    private func inline(_ text: String) -> Text {
-        let lines = text.components(separatedBy: "\n")
-        var result = Text("")
-        for (idx, raw) in lines.enumerated() {
-            // Strip Obsidian wiki-link brackets for readability: [[Note]] -> Note
-            var line = raw.replacingOccurrences(of: "[[", with: "")
-            line = line.replacingOccurrences(of: "]]", with: "")
-            let opts = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-            let attr = (try? AttributedString(markdown: line, options: opts)) ?? AttributedString(line)
-            result = result + Text(attr)
-            if idx < lines.count - 1 { result = result + Text("\n") }
+}
+
+/// The preview's expensive work is completed once per source revision, off the main actor.
+/// Keeping attributed strings in the render model prevents SwiftUI body recomputation from
+/// reparsing every visible line during image loading, scrolling, or checkbox updates.
+private struct MarkdownRenderItem: Identifiable, Sendable {
+    let id: Int
+    let block: MarkdownRenderBlock
+    let checkboxStart: Int
+}
+
+private enum MarkdownRenderBlock: Sendable {
+    case heading(level: Int, text: AttributedString)
+    case paragraph(AttributedString)
+    case bulleted([AttributedString])
+    case numbered([AttributedString])
+    case checklist([MarkdownRenderChecklistItem])
+    case code(language: String, code: String)
+    case quote(AttributedString)
+    case table(headers: [String], rows: [[String]])
+    case image(alt: String, src: String)
+    case rule
+}
+
+private struct MarkdownRenderChecklistItem: Sendable {
+    let done: Bool
+    let text: AttributedString
+}
+
+private enum MarkdownPreviewRenderer {
+    static func render(_ markdown: String) -> [MarkdownRenderItem] {
+        let blocks = MarkdownParser.parse(markdown)
+        var result: [MarkdownRenderItem] = []
+        result.reserveCapacity(blocks.count)
+
+        var checkboxStart = 0
+        for (index, block) in blocks.enumerated() {
+            let rendered: MarkdownRenderBlock
+            switch block {
+            case let .heading(level, text):
+                rendered = .heading(level: level, text: inline(text))
+            case let .paragraph(text):
+                rendered = .paragraph(inline(text))
+            case let .bulleted(items):
+                rendered = .bulleted(items.map(inline))
+            case let .numbered(items):
+                rendered = .numbered(items.map(inline))
+            case let .checklist(items):
+                rendered = .checklist(items.map {
+                    MarkdownRenderChecklistItem(done: $0.done, text: inline($0.text))
+                })
+            case let .code(language, code):
+                rendered = .code(language: language, code: code)
+            case let .quote(text):
+                rendered = .quote(inline(text))
+            case let .table(headers, rows):
+                rendered = .table(headers: headers, rows: rows)
+            case let .image(alt, src):
+                rendered = .image(alt: alt, src: src)
+            case .rule:
+                rendered = .rule
+            }
+
+            result.append(MarkdownRenderItem(id: index,
+                                             block: rendered,
+                                             checkboxStart: checkboxStart))
+            if case let .checklist(items) = block {
+                checkboxStart += items.count
+            }
         }
         return result
+    }
+
+    /// Render inline markdown (bold/italic/links/code) per line. This runs in the detached
+    /// renderer, so the main actor only receives ready-to-display attributed strings.
+    private static func inline(_ text: String) -> AttributedString {
+        let lines = text.components(separatedBy: "\n")
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        var result = AttributedString()
+        for (index, raw) in lines.enumerated() {
+            // Strip Obsidian wiki-link brackets for readability: [[Note]] -> Note
+            let line = raw.replacingOccurrences(of: "[[", with: "")
+                .replacingOccurrences(of: "]]", with: "")
+            let attributed = (try? AttributedString(markdown: line, options: options))
+                ?? AttributedString(line)
+            result.append(attributed)
+            if index < lines.count - 1 {
+                result.append(AttributedString("\n"))
+            }
+        }
+        return result
+    }
+}
+
+/// Resolves and reads local attachments away from the main actor so an image-heavy note
+/// does not stall the transition into its detail view.
+private struct LocalMarkdownImageView: View {
+    let url: URL?
+    let source: String
+    let documentURL: URL?
+    let vaultRootURL: URL?
+
+    @State private var image: Image?
+    @State private var didFinishLoading = false
+
+    init(url: URL? = nil,
+         source: String,
+         documentURL: URL? = nil,
+         vaultRootURL: URL? = nil) {
+        self.url = url
+        self.source = source
+        self.documentURL = documentURL
+        self.vaultRootURL = vaultRootURL
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                image.resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else if didFinishLoading {
+                HStack(spacing: 8) {
+                    Image(systemName: "photo")
+                        .foregroundStyle(Theme.mutedInk)
+                    Text("Missing image: \(source)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            }
+        }
+        .task(id: lookupID) {
+            didFinishLoading = false
+            image = nil
+
+            var resolvedURL = url
+            if resolvedURL == nil, let rootURL = vaultRootURL {
+                let sourceCopy = source
+                let documentURLCopy = documentURL
+                resolvedURL = await Task.detached(priority: .utility) {
+                    VaultStore.resolveImageURL(sourceCopy,
+                                               relativeTo: documentURLCopy,
+                                               rootURL: rootURL)
+                }.value
+            }
+
+            guard !Task.isCancelled, let resolvedURL else {
+                didFinishLoading = true
+                return
+            }
+
+            let data = await Task.detached(priority: .utility) {
+                try? Data(contentsOf: resolvedURL)
+            }.value
+            guard !Task.isCancelled else { return }
+            if let data, let decoded = Image(platformData: data) {
+                image = decoded
+            }
+            didFinishLoading = true
+        }
+    }
+
+    private var lookupID: String {
+        [source, url?.path ?? "", documentURL?.path ?? "", vaultRootURL?.path ?? ""]
+            .joined(separator: "\u{1F}")
     }
 }
 

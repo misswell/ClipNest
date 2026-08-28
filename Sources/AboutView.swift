@@ -22,9 +22,9 @@ struct AboutView: View {
                         Image(systemName: "doc.text.fill")
                             .font(.title)
                             .foregroundStyle(Theme.accent)
-                        Text("Markdown Vault").font(.title3.bold())
+                        Text("ClipNest").font(.title3.bold())
                     }
-                    Text("A native Markdown notes app for Mac, iPad and iPhone. Open any local folder — fully compatible with your Obsidian vault — and write with live preview, embedded images, and clean tables.")
+                    Text("An AI-powered Markdown inbox for Mac, iPad and iPhone. Copy something useful, open ClipNest, and turn it into a structured note in your Obsidian-compatible Vault.")
                         .foregroundStyle(Theme.mutedInk)
                 }
                 .appCard()
@@ -52,7 +52,7 @@ struct AboutView: View {
                 }
                 .appCard()
 
-                Text("Markdown Vault stores your notes as plain `.md` files on your device. Your content never leaves your Mac, iPad or iPhone.")
+                Text("ClipNest stores notes as plain `.md` files. Clipboard content is sent only to the AI provider configured by you when note generation is enabled.")
                     .font(.footnote)
                     .foregroundStyle(Theme.mutedInk)
             }

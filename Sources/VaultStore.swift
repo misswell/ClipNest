@@ -4,6 +4,23 @@ import UniformTypeIdentifiers
 import CoreServices   // FSEvents — live folder watching
 #endif
 
+enum VaultMoveDirection {
+    case up
+    case down
+}
+
+struct VaultDocumentMove: Equatable {
+    let source: URL
+    let destination: URL
+}
+
+/// Selection is intentionally separate from the file-tree publisher. Selecting a document is
+/// a high-frequency UI action and must not invalidate the entire recursive explorer tree.
+@MainActor
+final class VaultSelection: ObservableObject {
+    @Published var fileURL: URL?
+}
+
 /// Owns the currently-open Obsidian-compatible vault (a local folder), its file tree,
 /// the selected file, and all file-system CRUD. Persists the vault via a security-scoped
 /// bookmark so it re-opens on next launch.
@@ -11,7 +28,19 @@ import CoreServices   // FSEvents — live folder watching
 final class VaultStore: ObservableObject {
     @Published var rootURL: URL?
     @Published var rootNode: FileNode?
-    @Published var selectedFileURL: URL?
+    /// Monotonic identity for the current file-tree snapshot. It is intentionally not
+    /// published: `rootNode` already publishes refreshes, while this cheap token lets the
+    /// explorer skip equality work when only the selected document changes.
+    private(set) var treeRevision: UInt64 = 0
+    /// Compatibility access for non-UI services and tests. UI observers use `selection` so a
+    /// selection change does not publish through this store and rebuild the whole file tree.
+    let selection = VaultSelection()
+    var selectedFileURL: URL? {
+        get { selection.fileURL }
+        set { selection.fileURL = newValue }
+    }
+    /// Home-screen data is rebuilt with the file tree, not while a document is being opened.
+    @Published private(set) var homeSnapshot = VaultHomeSnapshot.empty
 
     /// Toggles wired to menu commands / toolbar on macOS.
     @Published var openVaultRequested = false
@@ -23,8 +52,19 @@ final class VaultStore: ObservableObject {
 
     /// Explorer sort direction (folders always group first). Persisted.
     @Published var sortAscending = true {
-        didSet { UserDefaults.standard.set(sortAscending, forKey: Keys.sortAsc); refresh() }
+        didSet {
+            UserDefaults.standard.set(sortAscending, forKey: Keys.sortAsc)
+            guard !isInitializing else { return }
+            // Choosing an alphabetical direction exits manual order mode. A later
+            // explicit move creates a new manual order for the affected directory.
+            childOrders.removeAll()
+            persistChildOrders()
+            refresh()
+        }
     }
+
+    /// The most recent filesystem move, used by the desktop tab bar to update open tabs.
+    @Published var lastDocumentMove: VaultDocumentMove?
 
     /// Recently-opened vault folders, most-recent first (Obsidian-style vault switcher).
     @Published var recentVaults: [URL] = []
@@ -40,9 +80,18 @@ final class VaultStore: ObservableObject {
         static let sortAsc = "settings.sortAscending"
         static let recents = "vault.recents"
         static let displayNames = "vault.displayNames"
+        static let childOrders = "vault.childOrders"
     }
 
     private var accessing: URL?
+    /// Manual child order keyed by directory path. Values are absolute standardized paths
+    /// so a move can update both the source and destination order deterministically.
+    private var childOrders: [String: [String]] = [:]
+    /// Save requests are serialized off the main actor. A revision prevents an older
+    /// debounced request from overwriting a newer edit when disk writes finish out of order.
+    private let fileWriter = VaultFileWriteCoordinator()
+    private var saveRevisions: [String: UInt64] = [:]
+    private var isInitializing = true
 
     init() {
         showHiddenFiles = UserDefaults.standard.bool(forKey: Keys.showHidden)
@@ -50,6 +99,14 @@ final class VaultStore: ObservableObject {
         recentVaults = (UserDefaults.standard.array(forKey: Keys.recents) as? [String] ?? [])
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
         displayNames = UserDefaults.standard.dictionary(forKey: Keys.displayNames) as? [String: String] ?? [:]
+        if let rawOrders = UserDefaults.standard.dictionary(forKey: Keys.childOrders) {
+            childOrders = rawOrders.reduce(into: [String: [String]]()) { result, entry in
+                if let paths = entry.value as? [String] {
+                    result[entry.key] = paths
+                }
+            }
+        }
+        isInitializing = false
     }
 
     // MARK: - Menu bridges
@@ -140,7 +197,9 @@ final class VaultStore: ObservableObject {
         stopWatching()
         stopAccessing()
         rootURL = nil
+        treeRevision &+= 1
         rootNode = nil
+        homeSnapshot = .empty
         selectedFileURL = nil
         UserDefaults.standard.removeObject(forKey: Keys.bookmark)
     }
@@ -195,8 +254,16 @@ final class VaultStore: ObservableObject {
 
     // MARK: - Tree building
     func refresh() {
-        guard let rootURL else { rootNode = nil; return }
-        rootNode = buildNode(at: rootURL, isRoot: true)
+        guard let rootURL else {
+            treeRevision &+= 1
+            rootNode = nil
+            homeSnapshot = .empty
+            return
+        }
+        let node = buildNode(at: rootURL, isRoot: true)
+        treeRevision &+= 1
+        rootNode = node
+        homeSnapshot = makeHomeSnapshot(from: node)
     }
 
     // MARK: - Live folder watching (auto-sync)
@@ -259,6 +326,7 @@ final class VaultStore: ObservableObject {
                 at: url,
                 includingPropertiesForKeys: [.isDirectoryKey],
                 options: [.skipsPackageDescendants])) ?? []
+            let ranks = childOrderRanks(for: url)
             let kids = contents
                 // Show every file type (only the hidden-files toggle filters dotfiles).
                 // Non-editable files still open to a graceful "Unsupported File" view.
@@ -266,6 +334,12 @@ final class VaultStore: ObservableObject {
                 .map { buildNode(at: $0) }
                 .sorted { lhs, rhs in
                     if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory && !rhs.isDirectory }
+                    if let lhsRank = ranks[canonicalPath(lhs.url)],
+                       let rhsRank = ranks[canonicalPath(rhs.url)] {
+                        return lhsRank < rhsRank
+                    }
+                    if ranks[canonicalPath(lhs.url)] != nil { return true }
+                    if ranks[canonicalPath(rhs.url)] != nil { return false }
                     let order = lhs.name.localizedStandardCompare(rhs.name)
                     return sortAscending ? order == .orderedAscending : order == .orderedDescending
                 }
@@ -275,12 +349,113 @@ final class VaultStore: ObservableObject {
     }
 
     // MARK: - Reading / writing
-    func loadText(_ url: URL) -> String {
+    nonisolated static func readText(at url: URL) -> String {
         (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 
+    func loadText(_ url: URL) -> String {
+        Self.readText(at: url)
+    }
+
     func save(_ text: String, to url: URL) {
-        try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+        let key = url.standardizedFileURL.path
+        let revision = (saveRevisions[key] ?? 0) + 1
+        saveRevisions[key] = revision
+        let writer = fileWriter
+        Task.detached(priority: .utility) {
+            await writer.write(Data(text.utf8), to: url, revision: revision)
+        }
+    }
+
+    /// All directories in the current vault, in the same depth-first order as the tree.
+    /// The root is included so a document can be moved back to the vault root.
+    func vaultDirectories() -> [URL] {
+        guard let rootNode else { return [] }
+        var result = [rootNode.url]
+        appendDirectories(from: rootNode, to: &result)
+        return result
+    }
+
+    /// Move a document to another directory without overwriting an existing file.
+    /// A name collision receives the same " 2", " 3" suffix convention as new files.
+    @discardableResult
+    func moveDocument(_ url: URL, to directory: URL) -> URL? {
+        guard isInsideVault(url), isInsideVault(directory) else { return nil }
+        let source = url.standardizedFileURL
+        let destinationDirectory = directory.standardizedFileURL
+        let sourceIsDirectory = (try? source.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+        let destinationIsDirectory = (try? destinationDirectory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+        guard !sourceIsDirectory, destinationIsDirectory else { return nil }
+
+        let sourceParent = source.deletingLastPathComponent().standardizedFileURL
+        guard sourceParent != destinationDirectory else { return nil }
+        let destination = uniqueURL(in: destinationDirectory, name: source.lastPathComponent)
+
+        do {
+            try FileManager.default.moveItem(at: source, to: destination)
+            updateOrderAfterMoving(source: source,
+                                   destination: destination,
+                                   sourceDirectory: sourceParent,
+                                   destinationDirectory: destinationDirectory)
+            if selectedFileURL?.standardizedFileURL == source {
+                selectedFileURL = destination
+            }
+            lastDocumentMove = VaultDocumentMove(source: source, destination: destination)
+            refresh()
+            return destination
+        } catch {
+            return nil
+        }
+    }
+
+    /// Move a document up or down among the documents in its current directory.
+    /// Folders remain grouped above files, matching the existing Explorer behavior.
+    @discardableResult
+    func moveDocumentInOrder(_ url: URL, direction: VaultMoveDirection) -> Bool {
+        let source = url.standardizedFileURL
+        guard isInsideVault(source),
+              let node = findNode(at: source, in: rootNode),
+              !node.isDirectory else { return false }
+        let directory = source.deletingLastPathComponent().standardizedFileURL
+        var siblings = childNodes(in: directory)
+        let documentIndexes = siblings.indices.filter { !siblings[$0].isDirectory }
+        guard let currentPosition = documentIndexes.firstIndex(where: {
+            canonicalPath(siblings[$0].url) == canonicalPath(source)
+        }) else { return false }
+
+        let targetPosition: Int
+        switch direction {
+        case .up:
+            guard currentPosition > 0 else { return false }
+            targetPosition = currentPosition - 1
+        case .down:
+            guard currentPosition + 1 < documentIndexes.count else { return false }
+            targetPosition = currentPosition + 1
+        }
+
+        siblings.swapAt(documentIndexes[currentPosition], documentIndexes[targetPosition])
+        childOrders[orderKey(for: directory)] = siblings.map { canonicalPath($0.url) }
+        persistChildOrders()
+        refresh()
+        return true
+    }
+
+    func canMoveDocument(_ url: URL, direction: VaultMoveDirection) -> Bool {
+        let source = url.standardizedFileURL
+        guard isInsideVault(source),
+              let node = findNode(at: source, in: rootNode),
+              !node.isDirectory else { return false }
+        let directory = source.deletingLastPathComponent().standardizedFileURL
+        let documentCount = childNodes(in: directory).filter { !$0.isDirectory }.count
+        guard let current = childNodes(in: directory)
+            .filter({ !$0.isDirectory })
+            .firstIndex(where: { canonicalPath($0.url) == canonicalPath(source) }) else {
+            return false
+        }
+        switch direction {
+        case .up: return current > 0
+        case .down: return current + 1 < documentCount
+        }
     }
 
     // MARK: - CRUD
@@ -318,6 +493,7 @@ final class VaultStore: ObservableObject {
 
     func delete(_ url: URL) {
         try? FileManager.default.trashOrRemove(url)
+        removeChildOrderPaths(under: url)
         if selectedFileURL == url { selectedFileURL = nil }
         refresh()
     }
@@ -334,6 +510,7 @@ final class VaultStore: ObservableObject {
         let dest = url.deletingLastPathComponent().appendingPathComponent(name)
         do {
             try FileManager.default.moveItem(at: url, to: dest)
+            rewriteChildOrderPaths(from: url, to: dest)
             if selectedFileURL == url { selectedFileURL = dest }
             refresh()
             return dest
@@ -353,10 +530,114 @@ final class VaultStore: ObservableObject {
         return candidate
     }
 
+    // MARK: - Manual tree order
+    private func canonicalPath(_ url: URL) -> String {
+        url.standardizedFileURL.path
+    }
+
+    private func orderKey(for directory: URL) -> String {
+        canonicalPath(directory)
+    }
+
+    private func childOrderRanks(for directory: URL) -> [String: Int] {
+        (childOrders[orderKey(for: directory)] ?? [])
+            .enumerated()
+            .reduce(into: [String: Int]()) { result, item in
+                result[item.element] = item.offset
+            }
+    }
+
+    private func persistChildOrders() {
+        UserDefaults.standard.set(childOrders, forKey: Keys.childOrders)
+    }
+
+    private func updateOrderAfterMoving(source: URL,
+                                         destination: URL,
+                                         sourceDirectory: URL,
+                                         destinationDirectory: URL) {
+        var sourceOrder = childNodes(in: sourceDirectory).map { canonicalPath($0.url) }
+        sourceOrder.removeAll { $0 == canonicalPath(source) }
+        childOrders[orderKey(for: sourceDirectory)] = sourceOrder
+
+        var destinationOrder = childNodes(in: destinationDirectory).map { canonicalPath($0.url) }
+        destinationOrder.removeAll { $0 == canonicalPath(destination) }
+        destinationOrder.append(canonicalPath(destination))
+        childOrders[orderKey(for: destinationDirectory)] = destinationOrder
+        persistChildOrders()
+    }
+
+    private func rewriteChildOrderPaths(from source: URL, to destination: URL) {
+        let sourcePath = canonicalPath(source)
+        let destinationPath = canonicalPath(destination)
+        var rewritten: [String: [String]] = [:]
+        for (directory, paths) in childOrders {
+            let newDirectory = replacingPathPrefix(directory, from: sourcePath, to: destinationPath)
+            rewritten[newDirectory] = paths.map {
+                replacingPathPrefix($0, from: sourcePath, to: destinationPath)
+            }
+        }
+        childOrders = rewritten
+        persistChildOrders()
+    }
+
+    private func removeChildOrderPaths(under url: URL) {
+        let target = canonicalPath(url)
+        childOrders = childOrders.reduce(into: [String: [String]]()) { result, entry in
+            guard !isPathInside(entry.key, target) else { return }
+            result[entry.key] = entry.value.filter { !isPathInside($0, target) }
+        }
+        persistChildOrders()
+    }
+
+    private func replacingPathPrefix(_ path: String, from source: String, to destination: String) -> String {
+        guard path == source || path.hasPrefix(source + "/") else { return path }
+        return path == source ? destination : destination + String(path.dropFirst(source.count))
+    }
+
+    private func isPathInside(_ path: String, _ directory: String) -> Bool {
+        path == directory || path.hasPrefix(directory + "/")
+    }
+
+    private func isInsideVault(_ url: URL) -> Bool {
+        guard let rootURL else { return false }
+        let root = canonicalPath(rootURL)
+        return isPathInside(canonicalPath(url), root)
+    }
+
+    private func appendDirectories(from node: FileNode, to result: inout [URL]) {
+        for child in node.children ?? [] where child.isDirectory {
+            result.append(child.url)
+            appendDirectories(from: child, to: &result)
+        }
+    }
+
+    private func findNode(at url: URL, in node: FileNode?) -> FileNode? {
+        guard let node else { return nil }
+        if canonicalPath(node.url) == canonicalPath(url) { return node }
+        for child in node.children ?? [] {
+            if let found = findNode(at: url, in: child) { return found }
+        }
+        return nil
+    }
+
+    private func childNodes(in directory: URL) -> [FileNode] {
+        guard let rootNode else { return [] }
+        return findNode(at: directory, in: rootNode)?.children ?? []
+    }
+
     // MARK: - Image resolution (Bear / Obsidian embeds)
     /// Resolve a markdown/Obsidian image reference to an on-disk URL.
     /// Handles `![[image.png]]`, `![alt](relative/path.png)`, optional `|size` suffix.
     func resolveImageURL(_ src: String, relativeTo fileURL: URL?) -> URL? {
+        Self.resolveImageURL(src, relativeTo: fileURL, rootURL: rootURL)
+    }
+
+    /// Nonisolated image lookup for preview tasks. The direct candidates are cheap, while
+    /// the filename fallback may enumerate a large vault; callers can safely run this
+    /// helper in a detached utility task.
+    nonisolated static func resolveImageURL(_ src: String,
+                                            relativeTo fileURL: URL?,
+                                            rootURL: URL?) -> URL? {
         var name = src
         if let bar = name.firstIndex(of: "|") { name = String(name[..<bar]) }   // Obsidian size hint
         name = name.removingPercentEncoding ?? name
@@ -388,5 +669,19 @@ private extension FileManager {
         } catch {
             try removeItem(at: url)
         }
+    }
+}
+
+/// Performs potentially blocking atomic writes away from the UI executor and preserves the
+/// order of edits for each document. The actor is intentionally scoped to one VaultStore so
+/// tests and separate app sessions do not share mutable write state.
+private actor VaultFileWriteCoordinator {
+    private var latestRevision: [String: UInt64] = [:]
+
+    func write(_ data: Data, to url: URL, revision: UInt64) {
+        let key = url.standardizedFileURL.path
+        guard revision >= (latestRevision[key] ?? 0) else { return }
+        latestRevision[key] = revision
+        try? data.write(to: url, options: .atomic)
     }
 }

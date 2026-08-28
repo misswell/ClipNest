@@ -8,6 +8,7 @@ xcuserdata/
 
 # XcodeGen generates the project from project.yml
 MarkdownVault.xcodeproj/
+ClipNest.xcodeproj/
 
 # Signing / secrets
 *.p12

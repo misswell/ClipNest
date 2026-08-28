@@ -175,6 +175,7 @@ private struct ExtensionRow: View {
 
 struct WikiPanel: View {
     @EnvironmentObject var store: VaultStore
+    @EnvironmentObject private var selection: VaultSelection
     var runInTerminal: (String) -> Void
     var onClose: () -> Void
 
@@ -204,7 +205,7 @@ struct WikiPanel: View {
             Text("Ingest").font(.system(size: 13, weight: .semibold))
             Text("Read the current note and integrate it into the wiki.").font(.system(size: 11)).foregroundStyle(VSCode.muted)
             Button("Ingest Current Note") { ingestCurrent() }
-                .disabled(store.selectedFileURL == nil)
+                .disabled(selection.fileURL == nil)
 
             Divider()
 
@@ -235,7 +236,7 @@ struct WikiPanel: View {
     }
 
     private func ingestCurrent() {
-        guard let file = store.selectedFileURL else { return }
+        guard let file = selection.fileURL else { return }
         let rel = relativePath(file)
         runInTerminal("claude \"Ingest the note '\(rel)' into the wiki per CLAUDE.md: extract entities and concepts, create or update the relevant wiki pages with [[links]], update wiki/index.md, and append a line to wiki/log.md.\"")
     }

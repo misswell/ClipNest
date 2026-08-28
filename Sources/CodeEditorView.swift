@@ -18,7 +18,7 @@ struct CodeEditorView: NSViewRepresentable {
 
         let tv = scroll.documentView as! NSTextView
         tv.delegate = context.coordinator
-        tv.isEditable = true
+        tv.isEditable = false
         tv.isSelectable = true
         tv.isRichText = false
         tv.allowsUndo = true
@@ -34,19 +34,21 @@ struct CodeEditorView: NSViewRepresentable {
         tv.isAutomaticDashSubstitutionEnabled = false
         tv.isAutomaticTextReplacementEnabled = false
         tv.isContinuousSpellCheckingEnabled = false
-        tv.string = text
         context.coordinator.textView = tv
-        context.coordinator.highlight()
+        // Do not assign a large document to NSTextView during view creation. Hydration is
+        // chunked across run-loop turns so the editor can appear without blocking tab changes.
+        context.coordinator.startHydration(text, in: tv)
         return scroll
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let tv = nsView.documentView as? NSTextView else { return }
+        guard !context.coordinator.isHydrating else { return }
         if tv.string != text {
             let sel = tv.selectedRange()
             tv.string = text
             tv.setSelectedRange(NSRange(location: min(sel.location, (text as NSString).length), length: 0))
-            context.coordinator.highlight()
+            context.coordinator.scheduleHighlight(after: 0.16)
         }
     }
 
@@ -58,8 +60,55 @@ struct CodeEditorView: NSViewRepresentable {
         let parent: CodeEditorView
         weak var textView: NSTextView?
         private var pendingSlash = 0
+        private var highlightWorkItem: DispatchWorkItem?
+        private var hydrationTask: Task<Void, Never>?
+        private(set) var isHydrating = false
 
         init(_ parent: CodeEditorView) { self.parent = parent }
+
+        deinit {
+            highlightWorkItem?.cancel()
+            hydrationTask?.cancel()
+        }
+
+        func startHydration(_ value: String, in textView: NSTextView) {
+            hydrationTask?.cancel()
+            isHydrating = true
+            textView.isEditable = false
+            textView.string = ""
+            textView.layoutManager?.allowsNonContiguousLayout = true
+
+            hydrationTask = Task { @MainActor [weak self, weak textView] in
+                guard let self, let textView else { return }
+                var index = value.startIndex
+                let chunkSize = 8_192
+
+                while index < value.endIndex {
+                    guard !Task.isCancelled else { return }
+                    let end = value.index(
+                        index,
+                        offsetBy: chunkSize,
+                        limitedBy: value.endIndex) ?? value.endIndex
+                    let chunk = String(value[index..<end])
+                    let storage = textView.textStorage
+                    storage?.beginEditing()
+                    storage?.replaceCharacters(
+                        in: NSRange(location: storage?.length ?? 0, length: 0),
+                        with: chunk)
+                    storage?.endEditing()
+                    index = end
+
+                    if index < value.endIndex {
+                        try? await Task.sleep(nanoseconds: 2_000_000)
+                    }
+                }
+
+                guard !Task.isCancelled else { return }
+                self.isHydrating = false
+                textView.isEditable = true
+                self.scheduleHighlight(after: 0.16)
+            }
+        }
 
         private var fgColor: NSColor {
             NSColor(srgbRed: VSCode.termFg.r, green: VSCode.termFg.g, blue: VSCode.termFg.b, alpha: 1)
@@ -67,12 +116,23 @@ struct CodeEditorView: NSViewRepresentable {
 
         /// Re-apply Live Preview styling, revealing syntax only on the caret's line.
         func highlight() {
+            guard !isHydrating else { return }
             guard let tv = textView, let ts = tv.textStorage else { return }
             let active = (tv.string as NSString).lineRange(for: tv.selectedRange())
             MarkdownStyler.apply(to: ts, baseColor: fgColor, activeLine: active)
         }
 
+        func scheduleHighlight(after delay: TimeInterval) {
+            highlightWorkItem?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.highlight()
+            }
+            highlightWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        }
+
         func textDidChange(_ notification: Notification) {
+            guard !isHydrating else { return }
             guard let tv = textView else { return }
             parent.text = tv.string
             highlight()

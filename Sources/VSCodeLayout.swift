@@ -6,6 +6,7 @@ import AppKit
 /// Activity bar · collapsible Explorer/Search side bar · editor · collapsible terminal panel.
 struct VSCodeLayout: View {
     @EnvironmentObject var store: VaultStore
+    @EnvironmentObject private var selection: VaultSelection
     @StateObject private var terminals = TerminalController()
 
     @State private var activity: ActivityItem = .explorer
@@ -19,11 +20,18 @@ struct VSCodeLayout: View {
 
     @State private var showSettings = false
     @State private var showAbout = false
-    @State private var editorMode: EditorMode = .edit   // Live Preview (editable, styled)
+    @AppStorage(EditorMode.persistenceKey) private var storedEditorMode = EditorMode.edit.rawValue
     @State private var showQuickOpen = false
     @State private var activeExtension: String?
     @AppStorage("editor.multipleTabs") private var multipleTabs = true
     @State private var openTabs: [URL] = []
+
+    private var editorMode: Binding<EditorMode> {
+        Binding(
+            get: { EditorMode(rawValue: storedEditorMode) ?? .edit },
+            set: { storedEditorMode = $0.rawValue }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -67,7 +75,7 @@ struct VSCodeLayout: View {
         .overlay {
             if showQuickOpen {
                 QuickOpenPalette(isPresented: $showQuickOpen) { url in
-                    store.selectedFileURL = url
+                    selection.fileURL = url
                 }
             }
         }
@@ -106,9 +114,13 @@ struct VSCodeLayout: View {
         .onReceive(NotificationCenter.default.publisher(for: .openExtension)) { note in
             activeExtension = note.object as? String
         }
-        .onChange(of: store.selectedFileURL) { _, url in openTab(url) }
+        .onChange(of: selection.fileURL) { _, url in openTab(url) }
+        .onChange(of: store.lastDocumentMove) { _, move in
+            guard let move else { return }
+            updateOpenTabs(for: move)
+        }
         .onChange(of: multipleTabs) { _, multi in
-            if !multi { openTabs = store.selectedFileURL.map { [$0] } ?? [] }
+            if !multi { openTabs = selection.fileURL.map { [$0] } ?? [] }
         }
         .sheet(isPresented: $showSettings) { sheet { SettingsView() } }
         .sheet(isPresented: $showAbout) { sheet { AboutView() } }
@@ -129,7 +141,7 @@ struct VSCodeLayout: View {
     @ViewBuilder
     private var sidebar: some View {
         switch activity {
-        case .explorer:   ExplorerSidebar()
+        case .explorer:   ExplorerSidebar(selection: selection)
         case .search:     SearchSidebar()
         case .extensions: ExtensionsSidebar()
         }
@@ -142,7 +154,7 @@ struct VSCodeLayout: View {
 
     // MARK: - Editor area
     private var displayedTabs: [URL] {
-        multipleTabs ? openTabs : (store.selectedFileURL.map { [$0] } ?? [])
+        multipleTabs ? openTabs : (selection.fileURL.map { [$0] } ?? [])
     }
 
     private func openTab(_ url: URL?) {
@@ -156,7 +168,18 @@ struct VSCodeLayout: View {
 
     private func closeTab(_ url: URL) {
         openTabs.removeAll { $0 == url }
-        if store.selectedFileURL == url { store.selectedFileURL = openTabs.last }
+        if selection.fileURL == url { selection.fileURL = openTabs.last }
+    }
+
+    private func updateOpenTabs(for move: VaultDocumentMove) {
+        var updated: [URL] = []
+        for tab in openTabs {
+            let candidate = tab.standardizedFileURL == move.source.standardizedFileURL
+                ? move.destination
+                : tab
+            if !updated.contains(candidate) { updated.append(candidate) }
+        }
+        openTabs = updated
     }
 
     /// Native folder chooser — pick any local folder of Markdown to open as a vault,
@@ -182,10 +205,10 @@ struct VSCodeLayout: View {
                 Divider().overlay(VSCode.border)
             }
             Group {
-                if let url = store.selectedFileURL {
+                if let url = selection.fileURL {
                     let node = FileNode(url: url, name: url.lastPathComponent, isDirectory: false, children: nil)
                     if node.isEditable {
-                        EditorPane(url: url, mode: $editorMode).id(url)
+                        EditorPane(url: url, mode: editorMode)
                     } else if node.isImage {
                         ImageFileView(url: url)
                     } else {
@@ -202,7 +225,7 @@ struct VSCodeLayout: View {
 
     @ViewBuilder
     private var editorTabBar: some View {
-        let isEditable = store.selectedFileURL.map {
+        let isEditable = selection.fileURL.map {
             FileNode.editableExtensions.contains($0.pathExtension.lowercased())
         } ?? false
         HStack(spacing: 0) {
@@ -215,7 +238,7 @@ struct VSCodeLayout: View {
             }
             Spacer(minLength: 8)
             if isEditable {
-                ModeToggle(mode: $editorMode).padding(.trailing, 10)
+                ModeToggle(mode: editorMode).padding(.trailing, 10)
             }
         }
         .frame(height: 35)
@@ -223,7 +246,7 @@ struct VSCodeLayout: View {
     }
 
     private func editorTab(_ url: URL) -> some View {
-        let active = store.selectedFileURL == url
+        let active = selection.fileURL == url
         return HStack(spacing: 6) {
             Image(systemName: "doc.text")
                 .font(.system(size: 11)).foregroundStyle(Color(hex: 0x6FB3D2))
@@ -243,7 +266,7 @@ struct VSCodeLayout: View {
         .overlay(alignment: .top) { Rectangle().fill(active ? VSCode.accent : Color.clear).frame(height: 1) }
         .overlay(alignment: .trailing) { Divider().overlay(VSCode.border) }
         .contentShape(Rectangle())
-        .onTapGesture { store.selectedFileURL = url }
+        .onTapGesture { selection.fileURL = url }
     }
 
     /// VS Code-style title bar: traffic-light gap · centered command/search bar · layout toggles.

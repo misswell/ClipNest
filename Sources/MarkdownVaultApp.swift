@@ -2,12 +2,21 @@ import SwiftUI
 
 @main
 struct MarkdownVaultApp: App {
-    @StateObject private var store = VaultStore()
+    @StateObject private var store: VaultStore
+    @StateObject private var captureCoordinator: CaptureCoordinator
+
+    init() {
+        let store = VaultStore()
+        _store = StateObject(wrappedValue: store)
+        _captureCoordinator = StateObject(wrappedValue: CaptureCoordinator(store: store))
+    }
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .environmentObject(store.selection)
+                .environmentObject(captureCoordinator)
                 .tint(Theme.accent)
         }
         #if os(macOS)

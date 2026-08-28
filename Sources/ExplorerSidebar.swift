@@ -6,6 +6,9 @@ import AppKit
 /// disclosure tree of the vault's folders and Markdown files.
 struct ExplorerSidebar: View {
     @EnvironmentObject var store: VaultStore
+    /// The reference is passed into row views, but this container does not observe it. This
+    /// keeps a document selection from invalidating the whole recursive tree.
+    let selection: VaultSelection
     @State private var expanded: Set<URL> = []
 
     // Inline name dialogs
@@ -14,6 +17,7 @@ struct ExplorerSidebar: View {
     @State private var newName = ""
     @State private var renameTarget: URL?
     @State private var renameText = ""
+    @State private var moveTarget: MoveDocumentTarget?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -41,6 +45,10 @@ struct ExplorerSidebar: View {
             TextField("name", text: $renameText)
             Button("Rename") { if let t = renameTarget { store.rename(t, to: renameText) }; renameTarget = nil }
             Button("Cancel", role: .cancel) { renameTarget = nil }
+        }
+        .sheet(item: $moveTarget) { target in
+            MoveDocumentView(fileURL: target.url) { moveTarget = nil }
+                .environmentObject(store)
         }
     }
 
@@ -93,11 +101,22 @@ struct ExplorerSidebar: View {
                 workspaceRow
                 if let root = store.rootURL, expanded.contains(root),
                    let kids = store.rootNode?.children {
+                    let availabilityByURL = fileTreeMoveAvailabilities(for: kids)
                     ForEach(kids) { child in
+                        let availability = availabilityByURL[child.url] ?? .none
                         TreeNode(node: child, depth: 1, expanded: $expanded,
                                  onNewFile: { dir in store.selectedFileURL = dir; newName = "Untitled.md"; showNewFile = true },
                                  onNewFolder: { dir in store.selectedFileURL = dir; newName = "New Folder"; showNewFolder = true },
                                  onRename: { url, name in renameTarget = url; renameText = name },
+                                 onMove: { url in moveTarget = MoveDocumentTarget(url: url) },
+                                 onSelect: { url in store.selectedFileURL = url },
+                                 onMoveInOrder: { url, direction in
+                                     _ = store.moveDocumentInOrder(url, direction: direction)
+                                 },
+                                 onDelete: { url in store.delete(url) },
+                                 selection: selection,
+                                 canMoveUp: availability.up,
+                                 canMoveDown: availability.down,
                                  onTerminalHere: openTerminalHere)
                     }
                 }
@@ -156,28 +175,78 @@ private struct TreeNode: View {
     var onNewFile: (URL) -> Void
     var onNewFolder: (URL) -> Void
     var onRename: (URL, String) -> Void
+    var onMove: (URL) -> Void
+    var onSelect: (URL) -> Void
+    var onMoveInOrder: (URL, VaultMoveDirection) -> Void
+    var onDelete: (URL) -> Void
+    let selection: VaultSelection
+    let canMoveUp: Bool
+    let canMoveDown: Bool
     var onTerminalHere: (URL) -> Void
 
-    @EnvironmentObject var store: VaultStore
-    @State private var hovering = false
-
     private var isExpanded: Bool { expanded.contains(node.url) }
-    private var isSelected: Bool { store.selectedFileURL == node.url }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             row
             if node.isDirectory, isExpanded, let kids = node.children {
+                let availabilityByURL = fileTreeMoveAvailabilities(for: kids)
                 ForEach(kids) { child in
+                    let availability = availabilityByURL[child.url] ?? .none
                     TreeNode(node: child, depth: depth + 1, expanded: $expanded,
                              onNewFile: onNewFile, onNewFolder: onNewFolder,
-                             onRename: onRename, onTerminalHere: onTerminalHere)
+                             onRename: onRename, onMove: onMove,
+                             onSelect: onSelect, onMoveInOrder: onMoveInOrder,
+                             onDelete: onDelete, selection: selection,
+                             canMoveUp: availability.up, canMoveDown: availability.down,
+                             onTerminalHere: onTerminalHere)
                 }
             }
         }
     }
 
     private var row: some View {
+        TreeNodeRow(node: node,
+                    depth: depth,
+                    expanded: $expanded,
+                    selection: selection,
+                    onNewFile: onNewFile,
+                    onNewFolder: onNewFolder,
+                    onRename: onRename,
+                    onMove: onMove,
+                    onSelect: onSelect,
+                    onMoveInOrder: onMoveInOrder,
+                    onDelete: onDelete,
+                    canMoveUp: canMoveUp,
+                    canMoveDown: canMoveDown,
+                    onTerminalHere: onTerminalHere)
+    }
+}
+
+/// The row observes only the lightweight selection object. The recursive TreeNode container
+/// remains stable when the active document changes.
+private struct TreeNodeRow: View {
+    let node: FileNode
+    let depth: Int
+    @Binding var expanded: Set<URL>
+    @ObservedObject var selection: VaultSelection
+    var onNewFile: (URL) -> Void
+    var onNewFolder: (URL) -> Void
+    var onRename: (URL, String) -> Void
+    var onMove: (URL) -> Void
+    var onSelect: (URL) -> Void
+    var onMoveInOrder: (URL, VaultMoveDirection) -> Void
+    var onDelete: (URL) -> Void
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    var onTerminalHere: (URL) -> Void
+
+    @State private var hovering = false
+
+    private var isExpanded: Bool { expanded.contains(node.url) }
+    private var isSelected: Bool { selection.fileURL == node.url }
+
+    var body: some View {
         HStack(spacing: 4) {
             // Disclosure chevron (folders only); files get matching indent.
             if node.isDirectory {
@@ -208,7 +277,7 @@ private struct TreeNode: View {
             if node.isDirectory {
                 if isExpanded { expanded.remove(node.url) } else { expanded.insert(node.url) }
             } else {
-                store.selectedFileURL = node.url
+                onSelect(node.url)
             }
         }
         .contextMenu { menu }
@@ -222,8 +291,16 @@ private struct TreeNode: View {
             Divider()
         }
         Button("Rename…") { onRename(node.url, node.name) }
+        if !node.isDirectory {
+            Divider()
+            Button("Move to Folder…") { onMove(node.url) }
+            Button("Move Up") { onMoveInOrder(node.url, .up) }
+                .disabled(!canMoveUp)
+            Button("Move Down") { onMoveInOrder(node.url, .down) }
+                .disabled(!canMoveDown)
+        }
         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([node.url]) }
-        Button("Delete", role: .destructive) { store.delete(node.url) }
+        Button("Delete", role: .destructive) { onDelete(node.url) }
     }
 
     private var rowBackground: some View {
