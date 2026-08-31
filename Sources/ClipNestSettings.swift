@@ -32,15 +32,15 @@ enum ClipboardProcessingMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .automatic: return "自动"
-        case .confirmBeforeSave: return "确认后保存"
+        case .automatic: return String(localized: "Automatic")
+        case .confirmBeforeSave: return String(localized: "Confirm before saving")
         }
     }
 
     var description: String {
         switch self {
-        case .automatic: return "分析、分类并直接写入 Vault"
-        case .confirmBeforeSave: return "先预览，可修改后再保存"
+        case .automatic: return String(localized: "Analyze, classify, and write straight into the vault")
+        case .confirmBeforeSave: return String(localized: "Preview first, edit before saving")
         }
     }
 }
@@ -54,7 +54,7 @@ enum PreferredLanguage: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .automatic: return "跟随内容"
+        case .automatic: return String(localized: "Match content")
         case .simplifiedChinese: return "简体中文"
         case .english: return "English"
         }

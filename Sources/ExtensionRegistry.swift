@@ -27,17 +27,17 @@ final class ExtensionRegistry: ObservableObject {
 
     let catalog: [AppExtension] = [
         AppExtension(id: "wiki-llm", name: "Wiki (LLM)", publisher: "Tertiary Infotech",
-                     summary: "Turn your vault into an LLM-maintained wiki — ingest sources, auto-link [[pages]], query and lint with Claude Code.",
-                     symbol: "books.vertical.fill", installs: "Karpathy-style", hasPanel: true),
+                     summary: String(localized: "Turn your vault into an LLM-maintained wiki — ingest sources, auto-link [[pages]], query and lint with Claude Code."),
+                     symbol: "books.vertical.fill", installs: String(localized: "Karpathy-style"), hasPanel: true),
         AppExtension(id: "github", name: "GitHub", publisher: "GitHub",
-                     summary: "Sign in with GitHub, then version your vault: init, commit, and push straight from the app via the gh CLI.",
-                     symbol: "arrow.triangle.branch", installs: "Source control", hasPanel: true),
-        AppExtension(id: "mermaid", name: "Mermaid Diagrams", publisher: "Community",
-                     summary: "Render ```mermaid fenced blocks as flowcharts and sequence diagrams in preview.",
-                     symbol: "flowchart", installs: "Preview", hasPanel: false, comingSoon: true),
-        AppExtension(id: "wordcount", name: "Word Count", publisher: "Community",
-                     summary: "Live word and character count for the current note in the status bar.",
-                     symbol: "textformat.123", installs: "Status bar", hasPanel: false, comingSoon: true),
+                     summary: String(localized: "Sign in with GitHub, then version your vault: init, commit, and push straight from the app via the gh CLI."),
+                     symbol: "arrow.triangle.branch", installs: String(localized: "Source control"), hasPanel: true),
+        AppExtension(id: "mermaid", name: String(localized: "Mermaid Diagrams"), publisher: String(localized: "Community"),
+                     summary: String(localized: "Render ```mermaid fenced blocks as flowcharts and sequence diagrams in preview."),
+                     symbol: "flowchart", installs: String(localized: "Preview"), hasPanel: false, comingSoon: true),
+        AppExtension(id: "wordcount", name: String(localized: "Word Count"), publisher: String(localized: "Community"),
+                     summary: String(localized: "Live word and character count for the current note in the status bar."),
+                     symbol: "textformat.123", installs: String(localized: "Status bar"), hasPanel: false, comingSoon: true),
     ]
 
     func ext(_ id: String) -> AppExtension? { catalog.first { $0.id == id } }

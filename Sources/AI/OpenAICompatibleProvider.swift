@@ -39,7 +39,7 @@ struct OpenAICompatibleProvider: AIProvider {
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw AIServiceError.httpStatus(-1, "AI 服务返回了无效响应。")
+            throw AIServiceError.httpStatus(-1, String(localized: "The AI service returned an invalid response."))
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
             throw AIServiceError.httpStatus(httpResponse.statusCode, apiErrorMessage(from: data))
@@ -154,8 +154,8 @@ private struct GeneratedNotePayload: Decodable {
     func makeNote() throws -> GeneratedNote {
         let title = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let content = content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !title.isEmpty else { throw AIServiceError.invalidNote("缺少标题") }
-        guard !content.isEmpty else { throw AIServiceError.invalidNote("缺少正文") }
+        guard !title.isEmpty else { throw AIServiceError.invalidNote(String(localized: "missing title")) }
+        guard !content.isEmpty else { throw AIServiceError.invalidNote(String(localized: "missing body")) }
 
         let summary = summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let tags = (tags ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }

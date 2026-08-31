@@ -15,12 +15,12 @@ enum ClipboardContentKind: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .plainText: return "文本"
-        case .url: return "链接"
-        case .textAndURL: return "文本和链接"
-        case .image: return "图片"
+        case .plainText: return String(localized: "Text")
+        case .url: return String(localized: "Link")
+        case .textAndURL: return String(localized: "Text & Link")
+        case .image: return String(localized: "Image")
         case .pdf: return "PDF"
-        case .richText: return "富文本"
+        case .richText: return String(localized: "Rich Text")
         case .html: return "HTML"
         }
     }

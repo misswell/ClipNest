@@ -14,6 +14,14 @@ struct EditorPane: View {
     @State private var loadedTextSnapshot = ""
     @State private var loadedURL: URL?
     @State private var isEditorReady = false
+    @State private var loadError: String?
+    @State private var reloadAttempt = 0
+    @State private var loadRequestGate = DocumentLoadRequestGate()
+
+    private struct LoadKey: Equatable {
+        let url: URL
+        let attempt: Int
+    }
 
     var body: some View {
         ZStack {
@@ -21,38 +29,77 @@ struct EditorPane: View {
                 // Keep the native NSTextView out of the transition. Its initial layout and
                 // syntax storage setup are synchronous, even when the document is empty.
                 editorContent
+            } else if loadError != nil {
+                loadFailureView
             } else {
                 ProgressView("Reading document…")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(VSCode.editorBg)
-        .task(id: url) {
-            // The host view is reused across tabs; flush the previous document before its
-            // state is replaced by the next URL.
-            flush()
+        .task(id: LoadKey(url: url, attempt: reloadAttempt)) {
+            let loadRequest = loadRequestGate.begin(for: url)
+            // The host view is reused across tabs; flush the previous document's pending edit
+            // to its own file — never to the newly selected one.
+            if let previous = loadedURL, previous != url, text != loadedTextSnapshot {
+                store.save(text, to: previous)
+            }
             saveTask?.cancel()
             hasLoadedText = false
             isEditorReady = false
             loadedURL = nil
             loadedTextSnapshot = ""
             text = ""
+            loadError = nil
             await Task.yield()
+            guard loadRequestGate.accepts(loadRequest) else { return }
+            let target = url
             let readTask = Task.detached(priority: .utility) {
-                VaultStore.readText(at: url)
+                Result { try VaultStore.readText(at: target) }
             }
             // There is no system push transition on macOS, but one run-loop-sized grace period
             // keeps NSTextView construction out of the same event that changes the active tab.
             try? await Task.sleep(nanoseconds: 60_000_000)
-            let loadedText = await readTask.value
-            guard !Task.isCancelled else { return }
-            loadedTextSnapshot = loadedText
-            text = loadedText
-            loadedURL = url
-            hasLoadedText = true
-            isEditorReady = true
+            let result = await readTask.value
+            // Apply the result even if this SwiftUI task was transiently cancelled during a
+            // tab switch (an abandoned load would leave the pane spinning forever), but only
+            // when no newer tab load has superseded this request.
+            guard loadRequestGate.accepts(loadRequest) else { return }
+            switch result {
+            case .success(let loadedText):
+                loadedTextSnapshot = loadedText
+                text = loadedText
+                loadedURL = url
+                hasLoadedText = true
+                isEditorReady = true
+            case .failure(let error):
+                loadError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
         }
         .onDisappear { flush() }
+    }
+
+    private var loadFailureView: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 42))
+                .foregroundStyle(VSCode.muted)
+            Text("Cannot Read Document")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(VSCode.fg)
+            Text(loadError ?? "")
+                .font(.system(size: 12))
+                .foregroundStyle(VSCode.muted)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            Button {
+                reloadAttempt &+= 1
+            } label: {
+                Label("Retry", systemImage: "arrow.clockwise")
+            }
+            .controlSize(.small)
+        }
     }
 
     @ViewBuilder
@@ -125,7 +172,9 @@ struct EditorPane: View {
     }
 
     private func flush() {
-        guard hasLoadedText else { return }
+        // Never rewrite the document unless the text actually diverged from what was
+        // loaded: a failed read must not be able to wipe the file with empty content.
+        guard hasLoadedText, text != loadedTextSnapshot else { return }
         saveTask?.cancel()
         store.save(text, to: url)
     }

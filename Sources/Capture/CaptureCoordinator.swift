@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
 final class CaptureCoordinator: ObservableObject {
@@ -80,7 +83,7 @@ final class CaptureCoordinator: ObservableObject {
     func saveDraft(_ draft: GeneratedNoteDraft) async {
         guard !isRunning else { return }
         guard let originalContent = ClipboardContent(text: draft.originalText) else {
-            errorMessage = "原始剪贴板内容为空，无法保存。"
+            errorMessage = String(localized: "The original clipboard content is empty and cannot be saved.")
             state = .failed
             return
         }
@@ -90,7 +93,7 @@ final class CaptureCoordinator: ObservableObject {
         errorMessage = nil
         showsStatusBanner = true
         state = .saving
-        statusMessage = "正在保存笔记…"
+        statusMessage = String(localized: "Saving note…")
 
         do {
             var note = draft.note
@@ -102,11 +105,11 @@ final class CaptureCoordinator: ObservableObject {
             lastSavedURL = url
             pendingDraft = nil
             state = .completed
-            statusMessage = "已保存到「\(note.category)」"
+            statusMessage = String(localized: "Saved to \(note.category)")
             scheduleBannerDismissal()
         } catch {
             state = .failed
-            statusMessage = "整理失败"
+            statusMessage = String(localized: "Capture failed")
             errorMessage = message(for: error)
         }
         isRunning = false
@@ -115,15 +118,21 @@ final class CaptureCoordinator: ObservableObject {
     func cancelPendingDraft() {
         pendingDraft = nil
         state = .idle
-        statusMessage = "已取消保存，剪贴板内容仍保留。"
+        statusMessage = String(localized: "Save canceled. The clipboard content is untouched.")
         showsStatusBanner = true
         scheduleBannerDismissal()
+    }
+
+    /// Hides the transient status banner without changing or canceling the work it reports.
+    func dismissStatusBanner() {
+        bannerTask?.cancel()
+        showsStatusBanner = false
     }
 
     func saveRawClipboard() async {
         guard !isRunning else { return }
         guard let snapshot = lastSnapshot ?? clipboardService.readCurrent() else {
-            errorMessage = "当前剪贴板没有可保存的文本。"
+            errorMessage = String(localized: "There is no saveable text on the clipboard.")
             return
         }
 
@@ -132,18 +141,18 @@ final class CaptureCoordinator: ObservableObject {
         errorMessage = nil
         showsStatusBanner = true
         state = .saving
-        statusMessage = "正在保存原始内容…"
+        statusMessage = String(localized: "Saving raw content…")
         do {
             let url = try await store.saveRawClipboard(snapshot.content)
             markProcessed(snapshot.hash)
             lastSavedURL = url
             pendingDraft = nil
             state = .completed
-            statusMessage = "原始内容已保存到「Inbox」"
+            statusMessage = String(localized: "Raw content saved to Inbox")
             scheduleBannerDismissal()
         } catch {
             state = .failed
-            statusMessage = "保存失败"
+            statusMessage = String(localized: "Save failed")
             errorMessage = message(for: error)
         }
         isRunning = false
@@ -162,7 +171,7 @@ final class CaptureCoordinator: ObservableObject {
         guard !isRunning else { return }
         guard force || automaticDetectionEnabled else {
             state = .idle
-            statusMessage = "自动读取剪贴板已关闭"
+            statusMessage = String(localized: "Automatic clipboard detection is off")
             showsStatusBanner = false
             return
         }
@@ -172,7 +181,7 @@ final class CaptureCoordinator: ObservableObject {
         errorMessage = nil
         showsStatusBanner = true
         state = .detecting
-        statusMessage = "正在检测剪贴板…"
+        statusMessage = String(localized: "Detecting clipboard…")
 
         if !force {
             let currentChangeCount = clipboardService.changeCount()
@@ -180,7 +189,7 @@ final class CaptureCoordinator: ObservableObject {
             if let recordedChangeCount, recordedChangeCount == currentChangeCount {
                 isRunning = false
                 state = .idle
-                statusMessage = "剪贴板未发生变化"
+                statusMessage = String(localized: "Clipboard unchanged")
                 showsStatusBanner = false
                 return
             }
@@ -189,8 +198,11 @@ final class CaptureCoordinator: ObservableObject {
         guard let snapshot = clipboardService.readCurrent() else {
             isRunning = false
             state = .idle
-            statusMessage = "剪贴板中没有可处理的文本"
-            showsStatusBanner = false
+            statusMessage = String(localized: "No processable text on the clipboard")
+            // A forced run comes from an explicit user action, so it always reports back;
+            // the automatic pass stays silent to avoid banners on every foreground return.
+            showsStatusBanner = force
+            if force { scheduleBannerDismissal() }
             return
         }
         lastSnapshot = snapshot
@@ -201,7 +213,7 @@ final class CaptureCoordinator: ObservableObject {
         if !force && (snapshot.hash == lastProcessed || snapshot.hash == lastAttempted) {
             isRunning = false
             state = .idle
-            statusMessage = "剪贴板内容已处理"
+            statusMessage = String(localized: "Clipboard content already processed")
             showsStatusBanner = false
             return
         }
@@ -209,23 +221,29 @@ final class CaptureCoordinator: ObservableObject {
         if !force && !automaticGenerationEnabled {
             isRunning = false
             state = .idle
-            statusMessage = "检测到新的剪贴板内容，可在设置中手动整理"
+            statusMessage = String(localized: "New clipboard content detected — organize it manually from Settings")
             showsStatusBanner = true
             scheduleBannerDismissal()
             return
         }
 
+        await generateAndSave(snapshot)
+    }
+
+    /// The shared note-organization pipeline behind clipboard and photo captures:
+    /// AI generation → classification → save (or stage for confirmation).
+    private func generateAndSave(_ snapshot: ClipboardSnapshot) async {
         // Record an attempt before making a network request. A foreground/background cycle
         // during a failing request must not start another request for the same hash.
         defaults.set(snapshot.hash, forKey: ClipNestSettings.lastAttemptedClipboardHash)
 
         do {
             state = .analyzing
-            statusMessage = "正在分析内容…"
+            statusMessage = String(localized: "Analyzing content…")
             let categories = store.topLevelCategories()
             let configuration = AIConfigurationStore.load()
             state = .generating
-            statusMessage = "正在生成笔记…"
+            statusMessage = String(localized: "Generating note…")
             let generated: GeneratedNote
             if let noteGenerator {
                 generated = try await noteGenerator.generate(
@@ -241,7 +259,7 @@ final class CaptureCoordinator: ObservableObject {
             }
 
             state = .classifying
-            statusMessage = "正在分类…"
+            statusMessage = String(localized: "Classifying…")
             let finalCategories = store.topLevelCategories()
             let category = ClassificationService().classify(
                 note: generated,
@@ -259,18 +277,18 @@ final class CaptureCoordinator: ObservableObject {
                 pendingDraft = GeneratedNoteDraft(note: note, snapshot: snapshot)
                 isRunning = false
                 state = .completed
-                statusMessage = "笔记已生成，请确认后保存"
+                statusMessage = String(localized: "Note generated — confirm to save")
                 return
             }
 
             state = .saving
-            statusMessage = "正在保存到「\(category)」…"
+            statusMessage = String(localized: "Saving to \(category)…")
             let url = try await store.saveGeneratedNote(note: note,
                                                          originalContent: snapshot.content)
             markProcessed(snapshot.hash)
             lastSavedURL = url
             state = .completed
-            statusMessage = "已保存到「\(category)」"
+            statusMessage = String(localized: "Saved to \(category)")
             scheduleBannerDismissal()
         } catch is CancellationError {
             state = .idle
@@ -278,12 +296,74 @@ final class CaptureCoordinator: ObservableObject {
             showsStatusBanner = false
         } catch {
             state = .failed
-            statusMessage = "整理失败"
+            statusMessage = String(localized: "Capture failed")
             showsStatusBanner = false
             errorMessage = message(for: error)
         }
         isRunning = false
     }
+
+    // MARK: - Photo capture
+
+    /// Captures raw text from any source (e.g. OCR output) and runs it through the
+    /// same organization pipeline as clipboard content.
+    func captureText(_ rawText: String) async {
+        guard !isRunning else { return }
+        bannerTask?.cancel()
+        isRunning = true
+        errorMessage = nil
+        showsStatusBanner = true
+        guard let content = ClipboardContent(text: rawText) else {
+            isRunning = false
+            state = .idle
+            statusMessage = String(localized: "No readable text was recognized")
+            scheduleBannerDismissal()
+            return
+        }
+        state = .analyzing
+        statusMessage = String(localized: "Analyzing content…")
+        let snapshot = ClipboardSnapshot(
+            content: content,
+            changeCount: defaults.integer(forKey: ClipNestSettings.lastClipboardChangeCount),
+            hash: ClipboardContent.hash(for: content.rawText))
+        lastSnapshot = snapshot
+        await generateAndSave(snapshot)
+    }
+
+#if os(iOS)
+    /// Records a photo picked through the zero-permission system picker (PHPicker):
+    /// recognize its text and organize it into a note.
+    func capturePhoto(_ image: UIImage) async {
+        guard !isRunning else { return }
+        bannerTask?.cancel()
+        isRunning = true
+        errorMessage = nil
+        showsStatusBanner = true
+        await finishPhotoCapture(image)
+    }
+
+    private func finishPhotoCapture(_ image: UIImage) async {
+        state = .analyzing
+        statusMessage = String(localized: "Recognizing text in photo…")
+        let text = (try? await Task.detached(priority: .utility) {
+            try PhotoCaptureService.recognizeText(in: image)
+        }.value) ?? ""
+        guard let content = ClipboardContent(text: text) else {
+            isRunning = false
+            state = .idle
+            statusMessage = String(localized: "No readable text was found in the photo")
+            scheduleBannerDismissal()
+            return
+        }
+        statusMessage = String(localized: "Text recognized — organizing…")
+        let snapshot = ClipboardSnapshot(
+            content: content,
+            changeCount: defaults.integer(forKey: ClipNestSettings.lastClipboardChangeCount),
+            hash: ClipboardContent.hash(for: content.rawText))
+        lastSnapshot = snapshot
+        await generateAndSave(snapshot)
+    }
+#endif
 
     private func record(_ snapshot: ClipboardSnapshot) {
         defaults.set(snapshot.hash, forKey: ClipNestSettings.lastSeenClipboardHash)
@@ -322,4 +402,5 @@ final class CaptureCoordinator: ObservableObject {
             self.showsStatusBanner = false
         }
     }
+
 }

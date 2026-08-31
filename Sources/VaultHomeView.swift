@@ -4,6 +4,10 @@ import SwiftUI
 /// capture path does not need to scan note bodies just to render the home screen.
 struct VaultHomeView: View {
     @EnvironmentObject private var store: VaultStore
+    @EnvironmentObject private var captureCoordinator: CaptureCoordinator
+    #if os(iOS)
+    @State private var showPhotoPicker = false
+    #endif
     var onSelect: ((URL) -> Void)? = nil
 
     var body: some View {
@@ -12,16 +16,22 @@ struct VaultHomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("ClipNest")
                         .font(.largeTitle.bold())
-                    Text("复制内容，打开 ClipNest，自动变成 Markdown 笔记。")
+                    Text("Copy something, open ClipNest, and it becomes a Markdown note.")
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedInk)
                 }
 
+                #if os(iOS)
+                photoCaptureSection
+                #endif
                 inboxSection
                 recentSection
                 categoriesSection
             }
             .padding(22)
+            // The Vault container owns the floating action button, including the compact
+            // iPhone sidebar route. Keep the final rows clear of it on the home detail.
+            .padding(.bottom, 88)
             .frame(maxWidth: 700, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
@@ -32,13 +42,51 @@ struct VaultHomeView: View {
         #endif
     }
 
+    /// Photo capture remains a secondary card; clipboard capture is the primary floating
+    /// action owned by the Vault container.
+    #if os(iOS)
+    private var photoCaptureSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                showPhotoPicker = true
+            } label: {
+                HStack(spacing: 8) {
+                    if captureCoordinator.isProcessing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "photo.on.rectangle")
+                    }
+                    Text("Capture Photo")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(captureCoordinator.isProcessing)
+            .sheet(isPresented: $showPhotoPicker) {
+                PhotoLibraryPicker { image in
+                    showPhotoPicker = false
+                    guard let image else { return }
+                    Task { await captureCoordinator.capturePhoto(image) }
+                }
+                .ignoresSafeArea()
+            }
+
+            Text("Use the floating Quick Paste button to capture the current clipboard content.")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedInk)
+        }
+        .appCard()
+    }
+    #endif
+
     private var inboxSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("Inbox", systemImage: "tray.fill")
             if let url = store.homeSnapshot.inboxFile {
                 noteButton(url)
             } else {
-                Text("未分类或 AI 失败的内容会安全保存到这里。")
+                Text("Unsorted content and AI failures are kept safe here.")
                     .font(.subheadline)
                     .foregroundStyle(Theme.mutedInk)
             }
@@ -48,10 +96,10 @@ struct VaultHomeView: View {
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("最近笔记", systemImage: "clock")
+            sectionTitle("Recent Notes", systemImage: "clock")
             let notes = store.recentMarkdownFiles(limit: 8)
             if notes.isEmpty {
-                Text("还没有 Markdown 笔记。")
+                Text("No Markdown notes yet.")
                     .foregroundStyle(Theme.mutedInk)
             } else {
                 ForEach(notes, id: \.self) { url in
@@ -65,10 +113,10 @@ struct VaultHomeView: View {
 
     private var categoriesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("分类", systemImage: "folder.fill")
+            sectionTitle("Categories", systemImage: "folder.fill")
             let categories = store.categorySummaries()
             if categories.isEmpty {
-                Text("创建的一级文件夹会显示在这里。")
+                Text("Top-level folders you create show up here.")
                     .foregroundStyle(Theme.mutedInk)
             } else {
                 ForEach(categories) { category in

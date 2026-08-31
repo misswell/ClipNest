@@ -90,6 +90,24 @@ final class ClipNestLogicTests: XCTestCase {
         XCTAssertTrue(prompt.contains("严格有效的 JSON"))
     }
 
+    func testDocumentLoadGateRejectsOutOfOrderAndRetriedResults() {
+        var gate = DocumentLoadRequestGate()
+        let firstURL = URL(fileURLWithPath: "/tmp/First.md")
+        let secondURL = URL(fileURLWithPath: "/tmp/Second.md")
+
+        let slowFirstRequest = gate.begin(for: firstURL)
+        let currentSecondRequest = gate.begin(for: secondURL)
+
+        XCTAssertFalse(gate.accepts(slowFirstRequest),
+                       "A slow previous document must not overwrite the current document")
+        XCTAssertTrue(gate.accepts(currentSecondRequest))
+
+        let retriedSecondRequest = gate.begin(for: secondURL)
+        XCTAssertFalse(gate.accepts(currentSecondRequest),
+                       "A retry must supersede the earlier request for the same URL")
+        XCTAssertTrue(gate.accepts(retriedSecondRequest))
+    }
+
     @MainActor
     func testVaultStoreReadsMarkdownContentFromNestedFolder() throws {
         let root = FileManager.default.temporaryDirectory

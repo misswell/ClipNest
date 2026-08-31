@@ -1,7 +1,16 @@
 import SwiftUI
 
+/// Timestamps the moment the Vault tab becomes visible, so the file list can ignore
+/// the tab-switch tap that "passes through" onto a note row underneath the tab bar.
+@MainActor
+final class VaultTabTracker: ObservableObject {
+    @Published var vaultTabActivatedAt = Date.distantPast
+}
+
 struct RootView: View {
     @EnvironmentObject private var captureCoordinator: CaptureCoordinator
+    @StateObject private var vaultTabTracker = VaultTabTracker()
+    @State private var appTab = 0
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -24,23 +33,23 @@ struct RootView: View {
                 )
             }
             .alert(
-                "整理失败",
+                "Capture Failed",
                 isPresented: Binding(
                     get: { captureCoordinator.errorMessage != nil },
                     set: { if !$0 { captureCoordinator.dismissError() } }
                 )
             ) {
-                Button("重试") {
+                Button("Retry") {
                     Task { await captureCoordinator.retry() }
                 }
-                Button("直接保存") {
+                Button("Save As-Is") {
                     Task { await captureCoordinator.saveRawClipboard() }
                 }
-                Button("取消", role: .cancel) {
+                Button("Cancel", role: .cancel) {
                     captureCoordinator.dismissError()
                 }
             } message: {
-                Text(captureCoordinator.errorMessage ?? "未知错误")
+                Text(captureCoordinator.errorMessage ?? String(localized: "Unknown error"))
             }
             .task {
                 await captureCoordinator.start()
@@ -56,12 +65,21 @@ struct RootView: View {
         #if os(macOS)
         VSCodeLayout()
         #else
-        TabView {
+        TabView(selection: $appTab) {
             VaultView()
                 .tabItem { Label("Vault", systemImage: "folder.fill") }
+                .tag(0)
+            DocumentTimelineView()
+                .tabItem { Label("Timeline", systemImage: "clock") }
+                .tag(1)
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
+                .tag(2)
         }
+        .onChange(of: appTab) { _, newValue in
+            if newValue == 0 { vaultTabTracker.vaultTabActivatedAt = Date() }
+        }
+        .environmentObject(vaultTabTracker)
         #endif
     }
 }

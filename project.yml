@@ -9,7 +9,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "2"
+    CURRENT_PROJECT_VERSION: "4"
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "GU9WTSTX9M"
     CODE_SIGN_STYLE: Automatic
@@ -43,6 +43,10 @@ targets:
         PRODUCT_NAME: "ClipNest"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Alternate icons are an iOS mechanism; scoping to iOS SDKs keeps the macOS
+        # actool pass from warning about the iOS-only sets.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES[sdk=iphoneos*]: "AppIconDay AppIconNight"
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES[sdk=iphonesimulator*]: "AppIconDay AppIconNight"
         INFOPLIST_FILE: Sources/Info.plist
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"

@@ -12,14 +12,14 @@ enum CaptureState: String, Equatable {
 
     var title: String {
         switch self {
-        case .idle: return "等待剪贴板"
-        case .detecting: return "检测剪贴板"
-        case .analyzing: return "分析内容"
-        case .generating: return "生成笔记"
-        case .classifying: return "选择分类"
-        case .saving: return "保存笔记"
-        case .completed: return "处理完成"
-        case .failed: return "整理失败"
+        case .idle: return String(localized: "Waiting for clipboard")
+        case .detecting: return String(localized: "Detecting clipboard")
+        case .analyzing: return String(localized: "Analyzing content")
+        case .generating: return String(localized: "Generating note")
+        case .classifying: return String(localized: "Classifying")
+        case .saving: return String(localized: "Saving note")
+        case .completed: return String(localized: "Done")
+        case .failed: return String(localized: "Capture failed")
         }
     }
 

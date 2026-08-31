@@ -33,6 +33,10 @@ struct MarkdownEditorView: View {
     @State private var loadedTextSnapshot = ""
     @State private var loadedURL: URL?
     @State private var isEditorReady = false
+    @State private var loadError: String?
+    @State private var reloadAttempt = 0
+    @State private var loadRequestGate = DocumentLoadRequestGate()
+    @State private var showDeleteConfirmation = false
     @Environment(\.horizontalSizeClass) private var hSize
 
     private var isWide: Bool { hSize != .compact }
@@ -48,6 +52,11 @@ struct MarkdownEditorView: View {
         )
     }
 
+    private struct LoadKey: Equatable {
+        let url: URL
+        let attempt: Int
+    }
+
     var body: some View {
         ZStack {
             // Do not construct TextEditor during the NavigationSplitView push. UIKit's text
@@ -56,14 +65,16 @@ struct MarkdownEditorView: View {
             // after the detached read has completed.
             if isEditorReady, hasLoadedText, loadedURL == url {
                 editorContent
+            } else if loadError != nil {
+                loadFailureView
             } else if hasLoadedText, loadedURL == url {
                 // This state is kept as a safety net for an interrupted load. Do not render a
                 // second scroll view here: mounting it during a navigation push causes another
                 // layout pass and was the remaining source of the visible hitch.
-                ProgressView("正在准备编辑器…")
+                ProgressView("Preparing editor…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ProgressView("正在读取文档…")
+                ProgressView("Reading document…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -72,28 +83,46 @@ struct MarkdownEditorView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            // Segmented controls and menus also create UIKit toolbar views. Keep them out of
-            // the push transaction together with TextEditor.
+            // Keep the segmented control and delete action out of the push transaction together
+            // with TextEditor until the document has finished loading.
             if isEditorReady, hasLoadedText, loadedURL == url {
                 toolbarContent
             }
         }
-        .task(id: url) {
-            // Removing .id(url) lets SwiftUI reuse the host view, so preserve a pending edit
-            // before replacing its document state when the user switches notes.
-            flushSave()
+        .alert("Delete Note", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                deleteCurrentNote()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This note will be removed from the vault.")
+        }
+        .task(id: LoadKey(url: url, attempt: reloadAttempt)) {
+            // Detached iCloud reads can finish after a newer document has already loaded. Give
+            // this request a generation before the first suspension so stale results can never
+            // overwrite the current editor state.
+            let loadRequest = loadRequestGate.begin(for: url)
+            // The host view is reused when the user switches notes, so `url` is already the
+            // NEW document here while `text` still holds the previous one. Flush that pending
+            // edit to its own file — never to the newly selected document.
+            if let previous = loadedURL, previous != url, text != loadedTextSnapshot {
+                store.save(text, to: previous)
+            }
             saveTask?.cancel()
             hasLoadedText = false
             isEditorReady = false
             loadedURL = nil
             loadedTextSnapshot = ""
             text = ""
+            loadError = nil
             // Read immediately in the background, but do not mount UIKit's TextEditor until the
             // compact NavigationSplitView push has had time to finish. A fast read must not put
             // the expensive native text-container setup back into the transition.
             await Task.yield()
+            guard loadRequestGate.accepts(loadRequest) else { return }
+            let target = url
             let readTask = Task.detached(priority: .utility) {
-                VaultStore.readText(at: url)
+                Result { try VaultStore.readText(at: target) }
             }
             // A local read often finishes before NavigationSplitView's compact push. Keep the
             // detail as a single lightweight ProgressView until that transition has settled;
@@ -101,17 +130,48 @@ struct MarkdownEditorView: View {
             // a frame hitch even though the file read itself is off the main actor.
             let settleNanoseconds: UInt64 = isWide ? 60_000_000 : 400_000_000
             try? await Task.sleep(nanoseconds: settleNanoseconds)
-            guard !Task.isCancelled else { return }
-            let loadedText = await readTask.value
-            guard !Task.isCancelled else { return }
-            loadedTextSnapshot = loadedText
-            text = loadedText
-            loadedURL = url
-            hasLoadedText = true
-
-            isEditorReady = true
+            let result = await readTask.value
+            // The push transition can transiently cancel this SwiftUI task; early-returning on
+            // cancellation would orphan the loading spinner forever (the id never changes after
+            // that), so a still-current result is applied even after cancellation. The request
+            // generation, rather than captured `url` values, proves that no newer load has begun.
+            guard loadRequestGate.accepts(loadRequest) else { return }
+            switch result {
+            case .success(let loadedText):
+                loadedTextSnapshot = loadedText
+                text = loadedText
+                loadedURL = url
+                hasLoadedText = true
+                isEditorReady = true
+            case .failure(let error):
+                loadError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
         }
         .onDisappear { flushSave() }
+    }
+
+    private var loadFailureView: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 42))
+                .foregroundStyle(Theme.mutedInk)
+            Text("Cannot Read Document")
+                .font(.headline)
+            Text(loadError ?? "")
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedInk)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Button {
+                reloadAttempt &+= 1
+            } label: {
+                Label("Retry", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.background)
     }
 
     @ViewBuilder
@@ -158,20 +218,6 @@ struct MarkdownEditorView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            Menu {
-                Button { insert(wrap: "**") } label: { Label("Bold", systemImage: "bold") }
-                Button { insert(wrap: "*") } label: { Label("Italic", systemImage: "italic") }
-                Button { insertLinePrefix("# ") } label: { Label("Heading", systemImage: "textformat.size") }
-                Button { insertLinePrefix("- ") } label: { Label("Bullet List", systemImage: "list.bullet") }
-                Button { insertLinePrefix("- [ ] ") } label: { Label("Checklist", systemImage: "checklist") }
-                Divider()
-                Button { insert(snippet: Snippets.table) } label: { Label("Table", systemImage: "tablecells") }
-                Button { insert(snippet: Snippets.image) } label: { Label("Image", systemImage: "photo") }
-                Button { insert(snippet: Snippets.codeBlock) } label: { Label("Code Block", systemImage: "curlybraces") }
-            } label: {
-                Label("Insert", systemImage: "plus.circle")
-            }
-
             Picker("View", selection: modeBinding) {
                 ForEach(EditorMode.allCases.filter { isWide || $0 != .split }) { m in
                     Image(systemName: m.systemImage).tag(m)
@@ -179,7 +225,25 @@ struct MarkdownEditorView: View {
             }
             .pickerStyle(.segmented)
             .frame(width: isWide ? 130 : 88)
+
+            Button(role: .destructive) {
+                showDeleteConfirmation = true
+            } label: {
+                Image(systemName: "trash")
+            }
+            .accessibilityLabel("Delete Note")
+            .help("Delete Note")
         }
+    }
+
+    private func deleteCurrentNote() {
+        // A debounced edit must not recreate a note after the user has just deleted it, and the
+        // disappearance callback must not flush the editor back to the removed URL.
+        saveTask?.cancel()
+        hasLoadedText = false
+        isEditorReady = false
+        loadedURL = nil
+        store.delete(url)
     }
 
     // MARK: - Saving
@@ -194,7 +258,9 @@ struct MarkdownEditorView: View {
     }
 
     private func flushSave() {
-        guard hasLoadedText else { return }
+        // Never rewrite the document unless the text actually diverged from what was
+        // loaded: a failed read must not be able to wipe the file with empty content.
+        guard hasLoadedText, text != loadedTextSnapshot else { return }
         saveTask?.cancel()
         store.save(text, to: url)
     }

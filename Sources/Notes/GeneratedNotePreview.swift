@@ -17,22 +17,22 @@ struct GeneratedNotePreview: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("笔记") {
-                    TextField("标题", text: $draft.title)
-                    TextField("摘要", text: $draft.summary, axis: .vertical)
+                Section("Note") {
+                    TextField("Title", text: $draft.title)
+                    TextField("Summary", text: $draft.summary, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField("分类", text: $draft.category)
-                    TextField("标签（用逗号分隔）", text: tagsBinding)
+                    TextField("Category", text: $draft.category)
+                    TextField("Tags (comma separated)", text: tagsBinding)
                 }
 
-                Section("正文") {
+                Section("Body") {
                     TextEditor(text: $draft.content)
                         .frame(minHeight: 260)
                         .font(.system(.body, design: .monospaced))
                 }
 
                 if let sourceURL = draft.sourceURL {
-                    Section("来源") {
+                    Section("Source") {
                         Label(sourceURL.absoluteString,
                               systemImage: "link")
                             .font(.footnote)
@@ -41,28 +41,28 @@ struct GeneratedNotePreview: View {
                     }
                 }
 
-                Section("原始剪贴板") {
-                    DisclosureGroup("查看原始内容") {
+                Section("Original Clipboard") {
+                    DisclosureGroup("View Original") {
                         Text(draft.originalText)
                             .font(.system(.footnote, design: .monospaced))
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    Text("类型：\(draft.contentKind.title)")
+                    Text("Type: \(draft.contentKind.title)")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
                 }
             }
-            .navigationTitle("确认笔记")
+            .navigationTitle("Confirm Note")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消", role: .cancel, action: onCancel)
+                    Button("Cancel", role: .cancel, action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { onSave(draft) }
+                    Button("Save") { onSave(draft) }
                         .disabled(draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                   || draft.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }

@@ -227,12 +227,12 @@ final class VaultStore: ObservableObject {
     }
 
     var vaultName: String {
-        guard let rootURL else { return "No Vault" }
+        guard let rootURL else { return String(localized: "No Vault") }
         return displayNames[rootURL.path] ?? rootURL.lastPathComponent
     }
 
     /// The vault's real folder name on disk (ignores any custom display name).
-    var vaultFolderName: String { rootURL?.lastPathComponent ?? "No Vault" }
+    var vaultFolderName: String { rootURL?.lastPathComponent ?? String(localized: "No Vault") }
 
     /// Rename the *display* name of the current vault (does not move the folder).
     /// Pass an empty/whitespace string to clear the override and fall back to the folder name.
@@ -349,12 +349,53 @@ final class VaultStore: ObservableObject {
     }
 
     // MARK: - Reading / writing
-    nonisolated static func readText(at url: URL) -> String {
-        (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+
+    /// Reading failures surfaced in the editor UI instead of a silent empty document.
+    enum VaultReadError: LocalizedError {
+        case iCloudDownloadTimedOut
+        case readFailed(underlying: Error)
+
+        var errorDescription: String? {
+            switch self {
+            case .iCloudDownloadTimedOut:
+                return String(localized: "The file has not finished downloading from iCloud (timed out). Check your connection and try again.")
+            case .readFailed(let underlying):
+                return underlying.localizedDescription
+            }
+        }
+    }
+
+    nonisolated static func readText(at url: URL) throws -> String {
+        // A vault inside iCloud Drive (e.g. the Obsidian container) may expose dataless
+        // placeholder files on iOS. Reading those fails outright, so request the download
+        // and wait until the contents are current before reading.
+        let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
+        if values?.isUbiquitousItem == true,
+           values?.ubiquitousItemDownloadingStatus != URLUbiquitousItemDownloadingStatus.current {
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+            let deadline = Date().addingTimeInterval(30)
+            var downloaded = false
+            while Date() < deadline {
+                if let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus,
+                   status == .current {
+                    downloaded = true
+                    break
+                }
+                Thread.sleep(forTimeInterval: 0.25)
+            }
+            if !downloaded {
+                throw VaultReadError.iCloudDownloadTimedOut
+            }
+        }
+        do {
+            return try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            throw VaultReadError.readFailed(underlying: error)
+        }
     }
 
     func loadText(_ url: URL) -> String {
-        Self.readText(at: url)
+        (try? Self.readText(at: url)) ?? ""
     }
 
     func save(_ text: String, to url: URL) {

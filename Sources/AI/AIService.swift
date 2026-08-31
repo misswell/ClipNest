@@ -23,17 +23,17 @@ enum AIServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidConfiguration:
-            return "AI 配置不完整，请检查 API Key、Base URL 和模型。"
+            return String(localized: "AI configuration is incomplete. Check the API key, base URL, and model.")
         case .invalidEndpoint:
-            return "Base URL 无效，请输入 http:// 或 https:// 地址。"
+            return String(localized: "The base URL is invalid. Enter an http:// or https:// address.")
         case let .httpStatus(status, message):
-            return message.isEmpty ? "AI 服务返回 HTTP \(status)。" : "AI 服务返回 HTTP \(status)：\(message)"
+            return message.isEmpty ? String(localized: "The AI service returned HTTP \(status).") : String(localized: "The AI service returned HTTP \(status): \(message)")
         case .emptyResponse:
-            return "AI 没有返回可用内容。"
+            return String(localized: "The AI returned no usable content.")
         case .invalidJSON:
-            return "AI 返回的内容不是有效的结构化 JSON。"
+            return String(localized: "The AI response is not valid structured JSON.")
         case let .invalidNote(message):
-            return "AI 笔记内容不完整：\(message)"
+            return String(localized: "AI note is incomplete: \(message)")
         }
     }
 }

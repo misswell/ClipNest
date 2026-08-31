@@ -23,15 +23,19 @@ On the Mac it presents a **VS Code-style workspace** — activity bar, explorer,
 - 📁 **Open any folder as a vault** — fully compatible with your existing **Obsidian** vault. Notes
   are plain `.md` files; nothing is locked into a proprietary store.
 - 📋 **Clipboard to note** — copy → open ClipNest → AI-generated title, summary, Markdown, tags,
-  classification, and automatic save with Inbox fallback.
+  classification, and automatic save with Inbox fallback. With auto-detection off, the home
+  screen's **Capture Clipboard** button captures the clipboard manually.
+- 📷 **Photo to note** — on-device OCR (Vision, 中文 + English) turns the **latest library photo**
+  or any photo you pick into the same organized note. No network needed for recognition.
 - 🌳 **File & folder management** — sidebar tree with create / rename / delete for notes and folders.
 - ✍️ **Live preview editor** — switch between **Edit**, **Split**, and **Preview**; autosaves as you type.
 - 🖼 **Images, Bear‑style** — renders standard `![alt](path.png)` *and* Obsidian embeds `![[image.png]]`,
   resolved relative to the note or anywhere in the vault.
 - 📊 **Tables, Notion‑style** — GitHub‑flavoured pipe tables render as clean, bordered grids.
 - ✅ **Lists, checklists, code blocks, block quotes & headings** — the everyday Markdown you actually use.
-- 💬 **Feedback** (via WhatsApp), **About**, and **Settings** tabs.
 - 🍏 **One codebase, three platforms** — SwiftUI multiplatform: macOS app, plus universal iPad / iPhone.
+- 🌐 **English & 简体中文** — fully localized (String Catalog); follows the system language, with per-app language override supported.
+- 🎨 **App icon switcher** — follow the system light/dark appearance or pin the day / night icon in Settings.
 
 ### 🖥 Mac: VS Code-style workspace
 
@@ -76,7 +80,7 @@ Sources/
 ├─ Capture/                   # foreground capture coordinator and progress state
 ├─ Notes/                     # generated note model, classification, Markdown and safe names
 ├─ MarkdownVaultApp.swift   # @main App + macOS menu commands (⌘N / ⌘O)
-├─ RootView.swift           # TabView: Vault · Feedback · About · Settings
+├─ RootView.swift           # TabView: Vault · Settings (iOS) / VSCodeLayout (macOS)
 ├─ Theme.swift              # Brand tokens + reusable card surface
 ├─ VaultStore.swift         # ObservableObject: vault, file tree, CRUD, bookmarks, image resolution
 ├─ FileNode.swift           # File/folder tree model
@@ -84,8 +88,7 @@ Sources/
 ├─ MarkdownEditorView.swift # Edit · Split · Preview, insert tools, autosave
 ├─ MarkdownParser.swift     # GFM-ish block parser
 ├─ MarkdownPreview.swift    # Native rendering (images, tables, lists, code…)
-├─ FeedbackView.swift       # Title + Message → WhatsApp
-├─ AboutView.swift          # App / Developer / Version
+├─ AppIconManager.swift     # Light/dark app-icon preference (system · day · night)
 └─ SettingsView.swift       # Vault, Clipboard, AI, classification and display preferences
 Resources/SampleVault/      # Bundled onboarding vault (notes + image)
 ```

@@ -16,9 +16,9 @@ enum ActivityItem: String, CaseIterable, Identifiable {
     }
     var help: String {
         switch self {
-        case .explorer:   return "Explorer"
-        case .search:     return "Search"
-        case .extensions: return "Extensions"
+        case .explorer:   return String(localized: "Explorer")
+        case .search:     return String(localized: "Search")
+        case .extensions: return String(localized: "Extensions")
         }
     }
 }
@@ -36,7 +36,7 @@ struct ActivityBar: View {
             }
             Spacer()
             AccountButton()
-            bottomButton("gearshape", help: "Settings", action: onSettings)
+            bottomButton("gearshape", help: String(localized: "Settings"), action: onSettings)
         }
         .padding(.vertical, 6)
         .frame(width: 48)
@@ -93,7 +93,7 @@ private struct AccountButton: View {
     var body: some View {
         Menu {
             Section("Accounts") {
-                Label(signedIn ? "iCloud — Signed In" : "iCloud — Not Signed In",
+                Label(signedIn ? String(localized: "iCloud — Signed In") : String(localized: "iCloud — Not Signed In"),
                       systemImage: signedIn ? "checkmark.icloud" : "icloud.slash")
                     .disabled(true)
             }
@@ -114,7 +114,7 @@ private struct AccountButton: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(signedIn ? "Accounts — iCloud Signed In" : "Accounts")
+        .help(signedIn ? String(localized: "Accounts — iCloud Signed In") : String(localized: "Accounts"))
     }
 
     private func openAppleIDSettings() {

@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import UniformTypeIdentifiers
 
 /// The main two-pane vault browser: file/folder tree on the left, editor/preview on the right.
@@ -87,6 +88,11 @@ struct VaultView: View {
 /// only this subtree; the outer shell stays stable while NavigationSplitView performs its push.
 private struct VaultNavigationHost: View {
     @EnvironmentObject private var store: VaultStore
+    @EnvironmentObject private var captureCoordinator: CaptureCoordinator
+    @EnvironmentObject private var vaultTabTracker: VaultTabTracker
+    #if os(iOS)
+    @State private var sidebarPhotoPicker = false
+    #endif
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var expandedFolders: Set<URL> = []
     @State private var navigationSelection: URL?
@@ -98,9 +104,30 @@ private struct VaultNavigationHost: View {
     let onDelete: (URL) -> Void
     let onMoveInOrder: (URL, VaultMoveDirection) -> Void
 
+    #if os(iOS)
+    private var pickPhotoAction: () -> Void {
+        {
+            NSLog("VV: pickPhotoAction fired, setting sidebarPhotoPicker = true")
+            sidebarPhotoPicker = true
+            NSLog("VV: sidebarPhotoPicker now = %d", sidebarPhotoPicker ? 1 : 0)
+        }
+    }
+    #else
+    private var pickPhotoAction: () -> Void { {} }
+    #endif
+
+    /// A human cannot realistically switch tabs and tap a note row within the window;
+    /// a passthrough tap always does. The stamp comes from the tab switch itself, so it
+    /// can never be refreshed by anything happening inside this screen.
+    private var withinTabSwitchGrace: Bool {
+        Date().timeIntervalSince(vaultTabTracker.vaultTabActivatedAt) < 0.35
+    }
+
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        ZStack(alignment: .bottomTrailing) {
+            NavigationSplitView(columnVisibility: $columnVisibility) {
             VaultSidebar(
+                onPickPhoto: pickPhotoAction,
                 navigationSelection: $navigationSelection,
                 expandedFolders: $expandedFolders,
                 expansionSnapshot: expandedFolders,
@@ -120,6 +147,23 @@ private struct VaultNavigationHost: View {
             #endif
         } detail: {
             detail
+                #if os(iOS)
+                .sheet(isPresented: $sidebarPhotoPicker) {
+                    PhotoLibraryPicker { image in
+                        sidebarPhotoPicker = false
+                        guard let image else { return }
+                        Task { await captureCoordinator.capturePhoto(image) }
+                    }
+                    .ignoresSafeArea()
+                }
+                #endif
+            }
+
+            if navigationSelection == nil, store.rootNode != nil {
+                quickPasteButton
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
+            }
         }
         .background(
             VaultSelectionNavigationBridge(
@@ -131,6 +175,9 @@ private struct VaultNavigationHost: View {
             store.restoreVaultIfNeeded()
             navigationSelection = store.selectedFileURL
         }
+        #if os(iOS)
+        // sheet temporarily removed for bisect
+        #endif
     }
 
     @ViewBuilder
@@ -155,6 +202,36 @@ private struct VaultNavigationHost: View {
         }
     }
 
+    private var quickPasteButton: some View {
+        Button {
+            Task { await captureCoordinator.reprocessClipboard() }
+        } label: {
+            HStack(spacing: 8) {
+                if captureCoordinator.isProcessing {
+                    ProgressView()
+                        .tint(.white)
+                }
+                Image(systemName: "doc.on.clipboard")
+                    .font(.subheadline.weight(.bold))
+                Text("Quick Paste")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .frame(height: 54)
+            .background(Theme.primary, in: Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(.white.opacity(0.22), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
+        }
+        .buttonStyle(.plain)
+        .disabled(captureCoordinator.isProcessing)
+        .accessibilityLabel("Quick Paste")
+        .accessibilityHint("Capture the current clipboard content")
+    }
+
     private func selectFile(_ url: URL) {
         guard navigationSelection != url else { return }
         navigationSelection = url
@@ -169,6 +246,8 @@ private struct VaultNavigationHost: View {
 /// still supplied to List for compact-width navigation, while file rows select explicitly.
 private struct VaultSidebar: View, Equatable {
     @EnvironmentObject private var store: VaultStore
+    @EnvironmentObject private var captureCoordinator: CaptureCoordinator
+    let onPickPhoto: () -> Void
     @Binding var navigationSelection: URL?
     @Binding var expandedFolders: Set<URL>
     /// A value snapshot used only by `EquatableView`; the selection binding is deliberately not
@@ -221,6 +300,11 @@ private struct VaultSidebar: View, Equatable {
                     }
                 }
                 .listStyle(.sidebar)
+                #if os(iOS)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: 76)
+                }
+                #endif
                 .toolbar { sidebarToolbar }
             }
         }
@@ -261,6 +345,14 @@ private struct VaultSidebar: View, Equatable {
     @ToolbarContentBuilder
     private var sidebarToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            #if os(iOS)
+            Button {
+                onPickPhoto()
+            } label: {
+                Image(systemName: "photo.on.rectangle")
+            }
+            .help("Capture Photo")
+            #endif
             Menu {
                 Button { onNewFile(nil) } label: {
                     Label("New File", systemImage: "doc.badge.plus")

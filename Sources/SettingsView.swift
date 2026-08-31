@@ -26,6 +26,7 @@ struct SettingsView: View {
     @State private var showSwitchVaultConfirmation = false
     @State private var pendingVaultURL: URL?
     @State private var showCloseVaultConfirmation = false
+    @State private var iconPreference = AppIconPreference.system
 
     init() {
         let configuration = AIConfigurationStore.load()
@@ -37,12 +38,11 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 28) {
                 Text("Settings").font(.largeTitle.bold())
 
                 // Vault
-                Text("VAULT").font(.caption.weight(.semibold)).foregroundStyle(Theme.mutedInk)
-                VStack(alignment: .leading, spacing: 0) {
+                sectionCard("VAULT") {
                     HStack {
                         Label("Current Vault", systemImage: "folder.fill")
                         Spacer()
@@ -57,34 +57,30 @@ struct SettingsView: View {
                         .help("Rename this vault")
                         .disabled(store.rootURL == nil)
                     }
-                    .padding(.vertical, 14)
-                    Divider()
+                    .padding(.vertical, 13)
+                    rowDivider
                     Button {
                         pendingVaultURL = nil
                         showSwitchVaultConfirmation = true
                     } label: {
                         Label("Open Another Folder…", systemImage: "folder.badge.plus")
                     }
-                    .padding(.vertical, 14)
-                    Divider()
+                    .padding(.vertical, 13)
+                    rowDivider
                     Button(role: .destructive) {
                         showCloseVaultConfirmation = true
                     } label: {
                         Label("Close Vault", systemImage: "xmark.circle")
                     }
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 13)
                 }
-                .padding(.horizontal, 16)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
 
                 // Recent vaults — one-click switching, Obsidian-style.
                 let others = store.recentVaults.filter { $0.standardizedFileURL != store.rootURL?.standardizedFileURL }
                 if !others.isEmpty {
-                    Text("RECENT VAULTS").font(.caption.weight(.semibold)).foregroundStyle(Theme.mutedInk)
-                    VStack(alignment: .leading, spacing: 0) {
+                    sectionCard("RECENT VAULTS") {
                         ForEach(Array(others.enumerated()), id: \.element) { index, url in
-                            if index > 0 { Divider() }
+                            if index > 0 { rowDivider }
                             HStack {
                                 Button {
                                     pendingVaultURL = url
@@ -105,163 +101,160 @@ struct SettingsView: View {
                                     store.removeRecent(url)
                                 } label: {
                                     Image(systemName: "xmark")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(Theme.mutedInk)
                                 }
                                 .buttonStyle(.borderless)
                                 .help("Remove from recent list")
                             }
-                            .padding(.vertical, 12)
+                            .padding(.vertical, 10)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
                 }
 
-                Text("CLIPBOARD").font(.caption.weight(.semibold)).foregroundStyle(Theme.mutedInk)
-                VStack(alignment: .leading, spacing: 0) {
+                sectionCard("CLIPBOARD") {
                     Toggle(isOn: $autoDetectClipboard) {
-                        Label("自动检测剪贴板", systemImage: "doc.on.clipboard")
+                        Label("Auto-Detect Clipboard", systemImage: "doc.on.clipboard")
                     }
-                    .padding(.vertical, 12)
-                    Divider()
+                    .padding(.vertical, 13)
+                    rowDivider
                     Toggle(isOn: $autoGenerateNote) {
-                        Label("自动生成笔记", systemImage: "sparkles")
+                        Label("Auto-Generate Notes", systemImage: "sparkles")
                     }
-                    .padding(.vertical, 12)
-                    Divider()
-                    Picker("处理模式", selection: $processingMode) {
+                    .padding(.vertical, 13)
+                    rowDivider
+                    Picker("Processing Mode", selection: $processingMode) {
                         ForEach(ClipboardProcessingMode.allCases) { mode in
                             Text(mode.title).tag(mode.rawValue)
                         }
                     }
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 13)
                     Text(ClipboardProcessingMode(rawValue: processingMode)?.description ?? "")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
-                        .padding(.bottom, 12)
-                    Divider()
+                        .padding(.bottom, 13)
+                    rowDivider
                     Button {
                         Task { await captureCoordinator.reprocessClipboard() }
                     } label: {
-                        Label("重新整理当前剪贴板", systemImage: "arrow.triangle.2.circlepath")
+                        Label("Reprocess Current Clipboard", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 13)
                 }
-                .padding(.horizontal, 16)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
-                .tint(Theme.accent)
 
-                Text("AI").font(.caption.weight(.semibold)).foregroundStyle(Theme.mutedInk)
-                VStack(alignment: .leading, spacing: 0) {
+                sectionCard("AI") {
                     TextField("Base URL", text: $aiBaseURL)
+                        .textFieldStyle(.plain)
                         .textContentType(.URL)
                         .autocorrectionDisabled()
-                        .padding(.vertical, 12)
-                    Divider()
+                        .padding(.vertical, 13)
+                    rowDivider
                     TextField("Model", text: $aiModel)
+                        .textFieldStyle(.plain)
                         .autocorrectionDisabled()
-                        .padding(.vertical, 12)
-                    Divider()
-                    SecureField("API Key（保存在钥匙串）", text: $apiKey)
+                        .padding(.vertical, 13)
+                    rowDivider
+                    SecureField("API Key (stored in Keychain)", text: $apiKey)
+                        .textFieldStyle(.plain)
                         .autocorrectionDisabled()
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         #endif
-                        .padding(.vertical, 12)
-                    Divider()
-                    Picker("输出语言", selection: $preferredLanguage) {
+                        .padding(.vertical, 13)
+                    rowDivider
+                    Picker("Output Language", selection: $preferredLanguage) {
                         ForEach(PreferredLanguage.allCases) { language in
                             Text(language.title).tag(language.rawValue)
                         }
                     }
-                    .padding(.vertical, 12)
-                    Text("ClipNest 使用 OpenAI-compatible Chat Completions 接口，并通过系统钥匙串保存 API Key。")
+                    .padding(.vertical, 13)
+                    Text("ClipNest uses an OpenAI-compatible Chat Completions API and stores the API key in the system Keychain.")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
-                        .padding(.bottom, 12)
-                    Divider()
+                        .padding(.bottom, 13)
+                    rowDivider
                     HStack(spacing: 12) {
                         Button {
                             saveAISettings()
                         } label: {
-                            Label("保存 AI 设置", systemImage: "checkmark.circle.fill")
+                            Label("Save AI Settings", systemImage: "checkmark.circle.fill")
                         }
                         .buttonStyle(.borderedProminent)
                         if aiSettingsSaved {
-                            Label("已保存", systemImage: "checkmark")
+                            Label("Saved", systemImage: "checkmark")
                                 .font(.caption)
                                 .foregroundStyle(Theme.accent)
                         }
                         Spacer()
                     }
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 13)
                 }
-                .padding(.horizontal, 16)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
-                .tint(Theme.accent)
                 .onChange(of: aiBaseURL) { _, _ in aiSettingsSaved = false }
                 .onChange(of: aiModel) { _, _ in aiSettingsSaved = false }
                 .onChange(of: preferredLanguage) { _, _ in aiSettingsSaved = false }
                 .onChange(of: apiKey) { _, _ in aiSettingsSaved = false }
 
-                Text("CLASSIFICATION").font(.caption.weight(.semibold)).foregroundStyle(Theme.mutedInk)
-                VStack(alignment: .leading, spacing: 0) {
+                sectionCard("CLASSIFICATION") {
                     Toggle(isOn: $autoClassify) {
-                        Label("自动分类", systemImage: "folder.badge.gearshape")
+                        Label("Auto-Classify", systemImage: "folder.badge.gearshape")
                     }
-                    .padding(.vertical, 12)
-                    Divider()
+                    .padding(.vertical, 13)
+                    rowDivider
                     Toggle(isOn: $allowNewCategories) {
-                        Label("允许创建新分类", systemImage: "folder.badge.plus")
+                        Label("Allow New Categories", systemImage: "folder.badge.plus")
                     }
-                    .padding(.vertical, 12)
-                    Divider()
-                    TextField("默认分类", text: $defaultCategory)
-                        .padding(.vertical, 12)
-                    Text("关闭自动分类或无法匹配时使用默认分类；如果分类不存在，内容会保存到 Inbox。")
+                    .padding(.vertical, 13)
+                    rowDivider
+                    TextField("Default Category", text: $defaultCategory)
+                        .textFieldStyle(.plain)
+                        .padding(.vertical, 13)
+                    Text("When auto-classification is off or nothing matches, the default category is used; otherwise content is saved to Inbox.")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
-                        .padding(.bottom, 12)
+                        .padding(.bottom, 13)
                 }
-                .padding(.horizontal, 16)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
-                .tint(Theme.accent)
 
                 // Display
-                Text("DISPLAY").font(.caption.weight(.semibold)).foregroundStyle(Theme.mutedInk)
-                VStack(alignment: .leading, spacing: 0) {
+                sectionCard("DISPLAY") {
                     Toggle(isOn: $store.showHiddenFiles) {
                         Label("Show Hidden Files", systemImage: "eye")
                     }
-                    .padding(.vertical, 12)
-                    Divider()
+                    .padding(.vertical, 13)
+                    rowDivider
                     Toggle(isOn: $previewDefault) {
                         Label("Open Notes in Preview", systemImage: "doc.text.image")
                     }
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 13)
                     #if os(macOS)
-                    Divider()
+                    rowDivider
                     Toggle(isOn: $multipleTabs) {
                         Label("Show Multiple Editor Tabs", systemImage: "rectangle.split.3x1")
                     }
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 13)
                     #endif
                 }
-                .padding(.horizontal, 16)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
-                .tint(Theme.accent)
+
+                // App icon — follow the system light/dark appearance or pin one manually.
+                sectionCard("APP ICON") {
+                    Picker("App Icon", selection: $iconPreference) {
+                        ForEach(AppIconPreference.allCases) { preference in
+                            Text(preference.title).tag(preference)
+                        }
+                    }
+                    .padding(.vertical, 13)
+                    Text("Follow the system light/dark appearance, or pin an icon regardless of it. iOS asks for confirmation when the icon changes.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                        .padding(.bottom, 13)
+                }
             }
             .padding(22)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
         .background(Theme.background)
-        .alert("确认切换目录？", isPresented: $showSwitchVaultConfirmation) {
-            Button("继续选择目录") {
+        .alert("Switch Vault?", isPresented: $showSwitchVaultConfirmation) {
+            Button("Choose Folder") {
                 if let pendingVaultURL {
                     store.openVault(at: pendingVaultURL)
                     self.pendingVaultURL = nil
@@ -269,23 +262,27 @@ struct SettingsView: View {
                     store.requestOpenVault()
                 }
             }
-            Button("取消", role: .cancel) {
+            Button("Cancel", role: .cancel) {
                 pendingVaultURL = nil
             }
         } message: {
-            Text("切换目录后，ClipNest 将停止使用当前 Vault；磁盘上的文件不会被删除。")
+            Text("After switching, ClipNest stops using the current vault. Files on disk are not deleted.")
         }
-        .alert("确认关闭目录？", isPresented: $showCloseVaultConfirmation) {
-            Button("关闭目录", role: .destructive) {
+        .alert("Close Vault?", isPresented: $showCloseVaultConfirmation) {
+            Button("Close Vault", role: .destructive) {
                 store.closeVault()
             }
-            Button("取消", role: .cancel) { }
+            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("关闭只会移除 ClipNest 当前打开的 Vault，不会删除目录中的文件。")
+            Text("Closing only detaches the vault from ClipNest. Files on disk are not deleted.")
         }
         .onChange(of: autoDetectClipboard) { _, enabled in
             guard enabled else { return }
             Task { await captureCoordinator.sceneDidBecomeActive() }
+        }
+        .onAppear { iconPreference = AppIconManager.current }
+        .onChange(of: iconPreference) { _, preference in
+            AppIconManager.set(preference)
         }
         // Bridge the importer used elsewhere — settings just toggles the request flag.
     }
@@ -300,5 +297,30 @@ struct SettingsView: View {
             )
         )
         aiSettingsSaved = true
+    }
+
+    // MARK: - Layout helpers
+
+    /// A settings group: a small caps header sitting close above its card, and uniform
+    /// spacing between groups. Keeps every section visually identical by construction.
+    private func sectionCard<Content: View>(_ title: LocalizedStringKey,
+                                            @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.mutedInk)
+            VStack(alignment: .leading, spacing: 0) {
+                content()
+            }
+            .padding(.horizontal, 16)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
+            .tint(Theme.accent)
+        }
+    }
+
+    /// Divider aligned with the row text instead of bleeding to the card edge.
+    private var rowDivider: some View {
+        Divider().padding(.leading, 16)
     }
 }

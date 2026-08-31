@@ -11,11 +11,11 @@ enum ClipNestVaultError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noVault:
-            return "请先打开一个 Markdown Vault。"
+            return String(localized: "Open a Markdown vault first.")
         case .cannotCreateFolder:
-            return "无法在 Vault 中创建目标分类文件夹。"
+            return String(localized: "Could not create the target category folder in the vault.")
         case .cannotWriteNote:
-            return "无法写入 Markdown 笔记，请检查 Vault 权限或磁盘空间。"
+            return String(localized: "Could not write the Markdown note. Check vault permissions or disk space.")
         }
     }
 }
@@ -27,14 +27,22 @@ struct VaultCategorySummary: Identifiable, Equatable {
     var id: String { name }
 }
 
+struct VaultTimelineItem: Identifiable, Equatable {
+    let url: URL
+    let date: Date
+
+    var id: URL { url }
+}
+
 /// Values needed by the lightweight vault home screen. The URLs are kept in newest-first
 /// order so opening a document never has to walk the vault or query file dates again.
 struct VaultHomeSnapshot: Equatable {
     let markdownFiles: [URL]
+    let timelineItems: [VaultTimelineItem]
     let inboxFile: URL?
     let categories: [VaultCategorySummary]
 
-    static let empty = VaultHomeSnapshot(markdownFiles: [], inboxFile: nil, categories: [])
+    static let empty = VaultHomeSnapshot(markdownFiles: [], timelineItems: [], inboxFile: nil, categories: [])
 }
 
 @MainActor
@@ -46,12 +54,13 @@ extension VaultStore {
                 .contentModificationDate ?? .distantPast
             return (url, date)
         }
-        let orderedFiles = datedFiles
+        let orderedItems = datedFiles
             .sorted { lhs, rhs in
                 if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
                 return lhs.0.path.localizedStandardCompare(rhs.0.path) == .orderedAscending
             }
-            .map { $0.0 }
+            .map { VaultTimelineItem(url: $0.0, date: $0.1) }
+        let orderedFiles = orderedItems.map(\.url)
 
         let inboxPath = node.url
             .appendingPathComponent(ClassificationService.inbox, isDirectory: true)
@@ -65,6 +74,7 @@ extension VaultStore {
             .map { VaultCategorySummary(name: $0.name, count: markdownCount(in: $0)) }
 
         return VaultHomeSnapshot(markdownFiles: orderedFiles,
+                                 timelineItems: orderedItems,
                                  inboxFile: inboxFile,
                                  categories: categories)
     }

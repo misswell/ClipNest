@@ -19,7 +19,6 @@ struct VSCodeLayout: View {
     @State private var dragStartTerminal: CGFloat?
 
     @State private var showSettings = false
-    @State private var showAbout = false
     @AppStorage(EditorMode.persistenceKey) private var storedEditorMode = EditorMode.edit.rawValue
     @State private var showQuickOpen = false
     @State private var activeExtension: String?
@@ -80,6 +79,7 @@ struct VSCodeLayout: View {
             }
         }
         .task { store.restoreVaultIfNeeded() }
+        .task { AppIconManager.applyStoredMacIcon() }
         // Bridge the "Open Vault Folder…" command / sidebar button to a native folder picker.
         .onChange(of: store.openVaultRequested) { _, requested in
             if requested {
@@ -123,7 +123,6 @@ struct VSCodeLayout: View {
             if !multi { openTabs = selection.fileURL.map { [$0] } ?? [] }
         }
         .sheet(isPresented: $showSettings) { sheet { SettingsView() } }
-        .sheet(isPresented: $showAbout) { sheet { AboutView() } }
         .sheet(item: Binding(get: { activeExtension.map { IdentifiedString($0) } },
                              set: { activeExtension = $0?.value })) { item in
             switch item.value {

@@ -19,7 +19,7 @@ struct MarkdownPreview: View {
     var body: some View {
         Group {
             if isParsing {
-                ProgressView("正在渲染预览…")
+                ProgressView("Rendering preview…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
