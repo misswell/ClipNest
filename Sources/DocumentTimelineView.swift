@@ -6,16 +6,22 @@ import SwiftUI
 struct DocumentTimelineView: View {
     @EnvironmentObject private var store: VaultStore
     @State private var navigationPath = NavigationPath()
+    @State private var timelineSections: [TimelineSection] = []
+    @State private var isPreparingTimeline = false
+    @State private var preparedSnapshotRevision: UInt64?
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
-                if store.rootNode == nil {
+                if store.rootURL == nil {
                     ContentUnavailableView(
                         "No Vault",
                         systemImage: "folder.badge.questionmark",
                         description: Text("Open a vault from the Vault tab to see its documents here.")
                     )
+                } else if timelineSections.isEmpty && (isPreparingTimeline || store.isHomeSnapshotLoading) {
+                    ProgressView("Preparing Timeline…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if timelineSections.isEmpty {
                     ContentUnavailableView(
                         "No Markdown Notes",
@@ -46,6 +52,34 @@ struct DocumentTimelineView: View {
         .task {
             store.restoreVaultIfNeeded()
         }
+        .task(id: TimelineReloadID(treeRevision: store.treeRevision,
+                                   snapshotRevision: store.homeSnapshotRevision)) {
+            let snapshotRevision = store.homeSnapshotRevision
+            guard preparedSnapshotRevision != snapshotRevision else { return }
+
+            let items = store.homeSnapshot.timelineItems
+            guard !items.isEmpty else {
+                timelineSections = []
+                preparedSnapshotRevision = snapshotRevision
+                isPreparingTimeline = false
+                return
+            }
+
+            isPreparingTimeline = true
+            let worker = Task.detached(priority: .utility) {
+                TimelineSectionBuilder.make(from: items)
+            }
+            let sections = await withTaskCancellationHandler(operation: {
+                await worker.value
+            }, onCancel: {
+                worker.cancel()
+            })
+
+            guard let sections, !Task.isCancelled else { return }
+            timelineSections = sections
+            preparedSnapshotRevision = snapshotRevision
+            isPreparingTimeline = false
+        }
     }
 
     private var timelineList: some View {
@@ -68,6 +102,7 @@ struct DocumentTimelineView: View {
                                 relativePath: relativePath(for: item.url),
                                 isLast: item.url == section.items.last?.url
                             )
+                            .equatable()
                         }
                         .buttonStyle(.plain)
                     }
@@ -79,25 +114,6 @@ struct DocumentTimelineView: View {
         }
     }
 
-    private var timelineSections: [TimelineSection] {
-        let calendar = Calendar.autoupdatingCurrent
-        let grouped = Dictionary(grouping: store.homeSnapshot.timelineItems) { item -> Date? in
-            guard item.date != .distantPast else { return nil }
-            return calendar.startOfDay(for: item.date)
-        }
-
-        return grouped
-            .map { TimelineSection(day: $0.key, items: $0.value) }
-            .sorted { lhs, rhs in
-                switch (lhs.day, rhs.day) {
-                case let (left?, right?): return left > right
-                case (nil, nil): return false
-                case (nil, _): return false
-                case (_, nil): return true
-                }
-            }
-    }
-
     private func relativePath(for url: URL) -> String {
         guard let rootURL = store.rootURL else { return url.lastPathComponent }
         let rootPath = rootURL.standardizedFileURL.path
@@ -107,7 +123,12 @@ struct DocumentTimelineView: View {
     }
 }
 
-private struct TimelineSection: Identifiable {
+private struct TimelineReloadID: Equatable {
+    let treeRevision: UInt64
+    let snapshotRevision: UInt64
+}
+
+private struct TimelineSection: Identifiable, Sendable {
     let day: Date?
     let items: [VaultTimelineItem]
 
@@ -121,7 +142,38 @@ private struct TimelineSection: Identifiable {
     }
 }
 
-private struct TimelineDocumentRow: View {
+/// The home snapshot is already newest-first. Grouping it linearly avoids the extra dictionary,
+/// per-section sort, and temporary allocations that become noticeable with a large vault.
+private enum TimelineSectionBuilder {
+    static func make(from items: [VaultTimelineItem]) -> [TimelineSection]? {
+        guard !items.isEmpty else { return [] }
+
+        let calendar = Calendar.autoupdatingCurrent
+        var sections: [TimelineSection] = []
+        sections.reserveCapacity(min(items.count, 365))
+        var currentDay: Date?
+        var currentItems: [VaultTimelineItem] = []
+        currentItems.reserveCapacity(16)
+
+        for (index, item) in items.enumerated() {
+            if index.isMultiple(of: 256), Task.isCancelled { return nil }
+            let day = item.date == .distantPast ? nil : calendar.startOfDay(for: item.date)
+            if !currentItems.isEmpty, day != currentDay {
+                sections.append(TimelineSection(day: currentDay, items: currentItems))
+                currentItems.removeAll(keepingCapacity: true)
+            }
+            currentDay = day
+            currentItems.append(item)
+        }
+
+        if !currentItems.isEmpty {
+            sections.append(TimelineSection(day: currentDay, items: currentItems))
+        }
+        return sections
+    }
+}
+
+private struct TimelineDocumentRow: View, Equatable {
     let item: VaultTimelineItem
     let relativePath: String
     let isLast: Bool
@@ -161,16 +213,15 @@ private struct TimelineDocumentRow: View {
         }
         .contentShape(Rectangle())
         .padding(.bottom, 12)
-        .background(alignment: .topLeading) {
+        .overlay(alignment: .topLeading) {
             if !isLast {
-                // Draw the connector from the finished row size so it cannot affect the
-                // LazyVStack's height calculation or create an infinite-height placeholder.
-                GeometryReader { proxy in
-                    Rectangle()
-                        .fill(Theme.accent.opacity(0.22))
-                        .frame(width: 2, height: max(0, proxy.size.height - 11))
-                        .offset(x: 6, y: 11)
-                }
+                // An overlay receives the finished row size without participating in its
+                // layout. This keeps LazyVStack's measurements finite while the connector
+                // still follows rows with one or two title lines.
+                TimelineConnectorShape()
+                    .stroke(Theme.accent.opacity(0.22), lineWidth: 2)
+                    .frame(width: 14)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 .allowsHitTesting(false)
             }
         }
@@ -179,5 +230,15 @@ private struct TimelineDocumentRow: View {
     private var timeLabel: String {
         guard item.date != .distantPast else { return "Unknown time" }
         return item.date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+private struct TimelineConnectorShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        guard rect.height > 11 else { return Path() }
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: 11))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        return path
     }
 }

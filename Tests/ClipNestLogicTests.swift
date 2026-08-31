@@ -136,6 +136,39 @@ final class ClipNestLogicTests: XCTestCase {
     }
 
     @MainActor
+    func testLargeVaultRefreshesTreeAndMetadataWithoutBlockingTheMainActor() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipNestLargeVault-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let documentCount = 10_000
+        for index in 0..<documentCount {
+            let url = root.appendingPathComponent("Note-\(index).md")
+            FileManager.default.createFile(atPath: url.path,
+                                           contents: Data("# Note \(index)\n".utf8))
+        }
+
+        let store = VaultStore()
+        defer {
+            store.closeVault()
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        store.openVault(at: root)
+        XCTAssertTrue(store.isTreeLoading,
+                      "A large vault should leave the main actor while its tree is built")
+
+        let deadline = Date().addingTimeInterval(30)
+        while store.isTreeLoading || store.isHomeSnapshotLoading {
+            XCTAssertLessThan(Date(), deadline, "Large vault refresh did not finish in time")
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        XCTAssertEqual(store.rootNode?.children?.count, documentCount)
+        XCTAssertEqual(store.homeSnapshot.markdownFiles.count, documentCount)
+        XCTAssertEqual(store.homeSnapshot.timelineItems.count, documentCount)
+    }
+
+    @MainActor
     func testVaultStoreMovesDocumentsAndMaintainsManualOrder() throws {
         let defaults = UserDefaults.standard
         let sortKey = "settings.sortAscending"

@@ -20,14 +20,14 @@ enum ClipNestVaultError: LocalizedError {
     }
 }
 
-struct VaultCategorySummary: Identifiable, Equatable {
+struct VaultCategorySummary: Identifiable, Equatable, Sendable {
     let name: String
     let count: Int
 
     var id: String { name }
 }
 
-struct VaultTimelineItem: Identifiable, Equatable {
+struct VaultTimelineItem: Identifiable, Equatable, Sendable {
     let url: URL
     let date: Date
 
@@ -36,7 +36,7 @@ struct VaultTimelineItem: Identifiable, Equatable {
 
 /// Values needed by the lightweight vault home screen. The URLs are kept in newest-first
 /// order so opening a document never has to walk the vault or query file dates again.
-struct VaultHomeSnapshot: Equatable {
+struct VaultHomeSnapshot: Equatable, Sendable {
     let markdownFiles: [URL]
     let timelineItems: [VaultTimelineItem]
     let inboxFile: URL?
@@ -49,34 +49,7 @@ struct VaultHomeSnapshot: Equatable {
 extension VaultStore {
     /// Build the home data alongside the tree refresh. Selection changes do not call this.
     func makeHomeSnapshot(from node: FileNode) -> VaultHomeSnapshot {
-        let datedFiles = markdownFiles(in: node).map { url in
-            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
-                .contentModificationDate ?? .distantPast
-            return (url, date)
-        }
-        let orderedItems = datedFiles
-            .sorted { lhs, rhs in
-                if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
-                return lhs.0.path.localizedStandardCompare(rhs.0.path) == .orderedAscending
-            }
-            .map { VaultTimelineItem(url: $0.0, date: $0.1) }
-        let orderedFiles = orderedItems.map(\.url)
-
-        let inboxPath = node.url
-            .appendingPathComponent(ClassificationService.inbox, isDirectory: true)
-            .standardizedFileURL
-            .path + "/"
-        let inboxFile = orderedFiles.first {
-            $0.standardizedFileURL.path.hasPrefix(inboxPath)
-        }
-        let categories = (node.children ?? [])
-            .filter(\.isDirectory)
-            .map { VaultCategorySummary(name: $0.name, count: markdownCount(in: $0)) }
-
-        return VaultHomeSnapshot(markdownFiles: orderedFiles,
-                                 timelineItems: orderedItems,
-                                 inboxFile: inboxFile,
-                                 categories: categories)
+        VaultHomeSnapshotBuilder.make(from: node)
     }
 
     /// Reads only immediate child folders. The AI prompt never needs a full Vault content scan.
@@ -217,17 +190,87 @@ extension VaultStore {
         return FileNameSanitizer.fileName(from: formatter.string(from: date), fallback: "Clipboard") + ".md"
     }
 
-    private func markdownCount(in node: FileNode) -> Int {
-        if node.isDirectory {
-            return node.children?.reduce(0) { $0 + markdownCount(in: $1) } ?? 0
-        }
-        return node.isMarkdown ? 1 : 0
+}
+
+/// Builds the home/timeline metadata without touching the main actor. File dates can be
+/// expensive for iCloud-backed vaults, and tens of thousands of metadata reads must not block
+/// the navigation or scrolling surfaces.
+enum VaultHomeSnapshotBuilder {
+    static func make(from node: FileNode) -> VaultHomeSnapshot {
+        makeSnapshot(from: node, shouldCancel: { false }) ?? .empty
     }
 
-    private func markdownFiles(in node: FileNode) -> [URL] {
-        if node.isDirectory {
-            return node.children?.flatMap(markdownFiles(in:)) ?? []
+    static func makeCancellable(from node: FileNode) -> VaultHomeSnapshot? {
+        makeSnapshot(from: node, shouldCancel: { Task.isCancelled })
+    }
+
+    private static func makeSnapshot(from node: FileNode,
+                                     shouldCancel: @Sendable () -> Bool) -> VaultHomeSnapshot? {
+        let rootChildren = node.isDirectory ? (node.children ?? []) : [node]
+        let topLevelDirectories = node.isDirectory
+            ? rootChildren.filter(\.isDirectory)
+            : []
+
+        var categoryCounts: [URL: Int] = [:]
+        categoryCounts.reserveCapacity(topLevelDirectories.count)
+        for directory in topLevelDirectories {
+            categoryCounts[directory.url] = 0
         }
-        return node.isMarkdown ? [node.url] : []
+
+        // Walk the existing tree once to collect both dates and category counts. The previous
+        // implementation flattened the tree and then traversed every category a second time.
+        var pending: [(node: FileNode, categoryURL: URL?)] = []
+        pending.reserveCapacity(rootChildren.count)
+        for child in rootChildren {
+            pending.append((child, child.isDirectory ? child.url : nil))
+        }
+
+        var datedFiles: [(url: URL, date: Date)] = []
+        datedFiles.reserveCapacity(1024)
+        var visited = 0
+        while let current = pending.popLast() {
+            visited += 1
+            if visited.isMultiple(of: 256), shouldCancel() { return nil }
+
+            if current.node.isDirectory {
+                for child in current.node.children ?? [] {
+                    pending.append((child, current.categoryURL))
+                }
+                continue
+            }
+            guard current.node.isMarkdown else { continue }
+
+            let date = (try? current.node.url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+            datedFiles.append((current.node.url, date))
+            if let categoryURL = current.categoryURL {
+                categoryCounts[categoryURL, default: 0] += 1
+            }
+        }
+
+        guard !shouldCancel() else { return nil }
+        datedFiles.sort { lhs, rhs in
+            if lhs.date != rhs.date { return lhs.date > rhs.date }
+            return lhs.url.path.localizedStandardCompare(rhs.url.path) == .orderedAscending
+        }
+        guard !shouldCancel() else { return nil }
+
+        let orderedItems = datedFiles.map { VaultTimelineItem(url: $0.url, date: $0.date) }
+        let orderedFiles = orderedItems.map(\.url)
+        let inboxPath = node.url
+            .appendingPathComponent(ClassificationService.inbox, isDirectory: true)
+            .standardizedFileURL
+            .path + "/"
+        let inboxFile = orderedFiles.first {
+            $0.standardizedFileURL.path.hasPrefix(inboxPath)
+        }
+        let categories = topLevelDirectories.map {
+            VaultCategorySummary(name: $0.name, count: categoryCounts[$0.url, default: 0])
+        }
+
+        return VaultHomeSnapshot(markdownFiles: orderedFiles,
+                                 timelineItems: orderedItems,
+                                 inboxFile: inboxFile,
+                                 categories: categories)
     }
 }

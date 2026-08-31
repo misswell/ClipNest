@@ -41,6 +41,16 @@ final class VaultStore: ObservableObject {
     }
     /// Home-screen data is rebuilt with the file tree, not while a document is being opened.
     @Published private(set) var homeSnapshot = VaultHomeSnapshot.empty
+    /// Changes only when the asynchronous home snapshot has been replaced. Views can use this
+    /// cheap token instead of comparing a potentially tens-of-thousands-item array.
+    @Published private(set) var homeSnapshotRevision: UInt64 = 0
+    /// Tree and metadata reads for a refresh happen off the main actor. This lets loading
+    /// surfaces show the previous snapshot (when available) instead of blocking navigation.
+    @Published private(set) var isHomeSnapshotLoading = false
+    /// Large vault trees are built off the main actor as well. Small vaults retain the
+    /// synchronous path so existing CRUD calls that expect an immediately-available tree keep
+    /// their behavior.
+    @Published private(set) var isTreeLoading = false
 
     /// Toggles wired to menu commands / toolbar on macOS.
     @Published var openVaultRequested = false
@@ -91,6 +101,8 @@ final class VaultStore: ObservableObject {
     /// debounced request from overwriting a newer edit when disk writes finish out of order.
     private let fileWriter = VaultFileWriteCoordinator()
     private var saveRevisions: [String: UInt64] = [:]
+    private var treeBuildTask: Task<Void, Never>?
+    private var homeSnapshotTask: Task<Void, Never>?
     private var isInitializing = true
 
     init() {
@@ -115,12 +127,18 @@ final class VaultStore: ObservableObject {
 
     // MARK: - Opening / restoring a vault
     func openVault(at url: URL) {
+        let switchingVault = rootURL?.standardizedFileURL != url.standardizedFileURL
         stopAccessing()
         // Non-sandboxed build: a scoped call isn't required, but harmless if it succeeds.
         if url.startAccessingSecurityScopedResource() {
             accessing = url
         }
         rootURL = url
+        if switchingVault {
+            rootNode = nil
+            homeSnapshot = .empty
+            homeSnapshotRevision &+= 1
+        }
         saveBookmark(for: url)
         addRecent(url)
         refresh()
@@ -149,8 +167,14 @@ final class VaultStore: ObservableObject {
         if !FileManager.default.fileExists(atPath: dest.path) {
             try? FileManager.default.copyItem(at: bundled, to: dest)
         }
+        let switchingVault = rootURL?.standardizedFileURL != dest.standardizedFileURL
         stopAccessing()
         rootURL = dest
+        if switchingVault {
+            rootNode = nil
+            homeSnapshot = .empty
+            homeSnapshotRevision &+= 1
+        }
         saveBookmark(for: dest)
         addRecent(dest)
         refresh()
@@ -196,10 +220,15 @@ final class VaultStore: ObservableObject {
     func closeVault() {
         stopWatching()
         stopAccessing()
+        treeBuildTask?.cancel()
+        homeSnapshotTask?.cancel()
         rootURL = nil
         treeRevision &+= 1
         rootNode = nil
         homeSnapshot = .empty
+        homeSnapshotRevision &+= 1
+        isTreeLoading = false
+        isHomeSnapshotLoading = false
         selectedFileURL = nil
         UserDefaults.standard.removeObject(forKey: Keys.bookmark)
     }
@@ -255,15 +284,115 @@ final class VaultStore: ObservableObject {
     // MARK: - Tree building
     func refresh() {
         guard let rootURL else {
+            treeBuildTask?.cancel()
+            homeSnapshotTask?.cancel()
+            isTreeLoading = false
+            isHomeSnapshotLoading = false
             treeRevision &+= 1
             rootNode = nil
             homeSnapshot = .empty
+            homeSnapshotRevision &+= 1
             return
         }
-        let node = buildNode(at: rootURL, isRoot: true)
+
+        treeBuildTask?.cancel()
+        homeSnapshotTask?.cancel()
         treeRevision &+= 1
-        rootNode = node
-        homeSnapshot = makeHomeSnapshot(from: node)
+        let refreshRevision = treeRevision
+        isHomeSnapshotLoading = true
+
+        if shouldBuildTreeAsynchronously(at: rootURL) {
+            isTreeLoading = true
+            let configuration = treeBuildConfiguration
+            let worker = Task.detached(priority: .utility) {
+                VaultFileTreeBuilder.makeCancellable(at: rootURL, configuration: configuration)
+            }
+            treeBuildTask = Task { [weak self] in
+                let node = await withTaskCancellationHandler(operation: {
+                    await worker.value
+                }, onCancel: {
+                    worker.cancel()
+                })
+
+                guard let node,
+                      !Task.isCancelled,
+                      let self,
+                      self.treeRevision == refreshRevision,
+                      self.rootURL?.standardizedFileURL == rootURL.standardizedFileURL
+                else { return }
+
+                self.rootNode = node
+                self.isTreeLoading = false
+                self.startHomeSnapshotRefresh(from: node,
+                                              revision: refreshRevision,
+                                              rootURL: rootURL)
+            }
+        } else {
+            isTreeLoading = false
+            let node = VaultFileTreeBuilder.make(at: rootURL, configuration: treeBuildConfiguration)
+            rootNode = node
+            startHomeSnapshotRefresh(from: node,
+                                     revision: refreshRevision,
+                                     rootURL: rootURL)
+        }
+    }
+
+    /// Starts a cancellable metadata pass after the tree is available. A separate worker keeps
+    /// file-date reads and sorting off the main actor even for small vaults.
+    private func startHomeSnapshotRefresh(from node: FileNode,
+                                          revision: UInt64,
+                                          rootURL: URL) {
+        homeSnapshotTask?.cancel()
+        isHomeSnapshotLoading = true
+        let worker = Task.detached(priority: .utility) {
+            VaultHomeSnapshotBuilder.makeCancellable(from: node)
+        }
+        homeSnapshotTask = Task { [weak self] in
+            let snapshot = await withTaskCancellationHandler(operation: {
+                await worker.value
+            }, onCancel: {
+                worker.cancel()
+            })
+
+            guard let snapshot,
+                  !Task.isCancelled,
+                  let self,
+                  self.treeRevision == revision,
+                  self.rootURL?.standardizedFileURL == rootURL.standardizedFileURL
+            else { return }
+
+            self.homeSnapshot = snapshot
+            self.homeSnapshotRevision &+= 1
+            self.isHomeSnapshotLoading = false
+        }
+    }
+
+    private var treeBuildConfiguration: VaultTreeBuildConfiguration {
+        VaultTreeBuildConfiguration(showHiddenFiles: showHiddenFiles,
+                                    sortAscending: sortAscending,
+                                    childOrders: childOrders)
+    }
+
+    /// Do a bounded probe before choosing the asynchronous path. It visits at most this many
+    /// entries, so even a vault with deeply nested directories never requires a full main-actor
+    /// scan just to decide how to refresh.
+    private func shouldBuildTreeAsynchronously(at rootURL: URL) -> Bool {
+        let options: FileManager.DirectoryEnumerationOptions = showHiddenFiles
+            ? [.skipsPackageDescendants]
+            : [.skipsHiddenFiles, .skipsPackageDescendants]
+        guard let enumerator = FileManager.default.enumerator(
+            at: rootURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: options
+        ) else { return false }
+
+        let threshold = VaultFileTreeBuilder.asynchronousThreshold
+        var count = 0
+        while enumerator.nextObject() != nil {
+            count += 1
+            if count > threshold { return true }
+        }
+        return false
     }
 
     // MARK: - Live folder watching (auto-sync)
@@ -316,37 +445,6 @@ final class VaultStore: ObservableObject {
     private func startWatching(_ url: URL) {}
     private func stopWatching() {}
     #endif
-
-    private func buildNode(at url: URL, isRoot: Bool = false) -> FileNode {
-        let name = url.lastPathComponent
-        var children: [FileNode]? = nil
-        let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-        if isDir {
-            let contents = (try? FileManager.default.contentsOfDirectory(
-                at: url,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsPackageDescendants])) ?? []
-            let ranks = childOrderRanks(for: url)
-            let kids = contents
-                // Show every file type (only the hidden-files toggle filters dotfiles).
-                // Non-editable files still open to a graceful "Unsupported File" view.
-                .filter { showHiddenFiles || !$0.lastPathComponent.hasPrefix(".") }
-                .map { buildNode(at: $0) }
-                .sorted { lhs, rhs in
-                    if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory && !rhs.isDirectory }
-                    if let lhsRank = ranks[canonicalPath(lhs.url)],
-                       let rhsRank = ranks[canonicalPath(rhs.url)] {
-                        return lhsRank < rhsRank
-                    }
-                    if ranks[canonicalPath(lhs.url)] != nil { return true }
-                    if ranks[canonicalPath(rhs.url)] != nil { return false }
-                    let order = lhs.name.localizedStandardCompare(rhs.name)
-                    return sortAscending ? order == .orderedAscending : order == .orderedDescending
-                }
-            children = kids
-        }
-        return FileNode(url: url, name: name, isDirectory: isDir, children: children)
-    }
 
     // MARK: - Reading / writing
 
@@ -699,6 +797,98 @@ final class VaultStore: ObservableObject {
             }
         }
         return nil
+    }
+}
+
+private struct VaultTreeBuildConfiguration: Sendable {
+    let showHiddenFiles: Bool
+    let sortAscending: Bool
+    let childOrders: [String: [String]]
+}
+
+/// Builds the recursive Explorer tree away from the main actor. The builder keeps the same
+/// folder-first/manual-order semantics as the old synchronous implementation, but cooperates
+/// with cancellation so a burst of file-system events cannot leave several large scans running.
+private enum VaultFileTreeBuilder {
+    static let asynchronousThreshold = 512
+
+    static func make(at url: URL,
+                     configuration: VaultTreeBuildConfiguration) -> FileNode {
+        makeNode(at: url, configuration: configuration, shouldCancel: { false })!
+    }
+
+    static func makeCancellable(at url: URL,
+                                configuration: VaultTreeBuildConfiguration) -> FileNode? {
+        makeNode(at: url,
+                 configuration: configuration,
+                 shouldCancel: { Task.isCancelled })
+    }
+
+    private static func makeNode(at url: URL,
+                                 configuration: VaultTreeBuildConfiguration,
+                                 shouldCancel: @Sendable () -> Bool) -> FileNode? {
+        guard !shouldCancel() else { return nil }
+
+        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+        var children: [FileNode]? = nil
+        if isDirectory {
+            let contents = (try? FileManager.default.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsPackageDescendants])) ?? []
+            let ranks = childOrderRanks(for: url, configuration: configuration)
+            var nodes: [FileNode] = []
+            nodes.reserveCapacity(contents.count)
+
+            for childURL in contents {
+                guard configuration.showHiddenFiles || !childURL.lastPathComponent.hasPrefix(".") else {
+                    continue
+                }
+                guard let child = makeNode(at: childURL,
+                                           configuration: configuration,
+                                           shouldCancel: shouldCancel) else {
+                    return nil
+                }
+                nodes.append(child)
+            }
+
+            guard !shouldCancel() else { return nil }
+            nodes.sort { lhs, rhs in
+                if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory && !rhs.isDirectory }
+                if let lhsRank = ranks[canonicalPath(lhs.url)],
+                   let rhsRank = ranks[canonicalPath(rhs.url)] {
+                    return lhsRank < rhsRank
+                }
+                if ranks[canonicalPath(lhs.url)] != nil { return true }
+                if ranks[canonicalPath(rhs.url)] != nil { return false }
+                let order = lhs.name.localizedStandardCompare(rhs.name)
+                return configuration.sortAscending
+                    ? order == .orderedAscending
+                    : order == .orderedDescending
+            }
+            guard !shouldCancel() else { return nil }
+            children = nodes
+        }
+
+        return FileNode(url: url,
+                        name: url.lastPathComponent,
+                        isDirectory: isDirectory,
+                        children: children)
+    }
+
+    private static func childOrderRanks(for directory: URL,
+                                        configuration: VaultTreeBuildConfiguration) -> [String: Int] {
+        let paths = configuration.childOrders[canonicalPath(directory)] ?? []
+        var result: [String: Int] = [:]
+        result.reserveCapacity(paths.count)
+        for (offset, path) in paths.enumerated() {
+            result[path] = offset
+        }
+        return result
+    }
+
+    private static func canonicalPath(_ url: URL) -> String {
+        url.standardizedFileURL.path
     }
 }
 

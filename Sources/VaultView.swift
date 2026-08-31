@@ -159,7 +159,7 @@ private struct VaultNavigationHost: View {
                 #endif
             }
 
-            if navigationSelection == nil, store.rootNode != nil {
+            if navigationSelection == nil, store.rootURL != nil {
                 quickPasteButton
                     .padding(.trailing, 20)
                     .padding(.bottom, 20)
@@ -269,7 +269,13 @@ private struct VaultSidebar: View, Equatable {
     var body: some View {
         Group {
             if store.rootNode == nil {
-                emptyVault
+                if store.rootURL != nil, store.isTreeLoading {
+                    ProgressView("Loading Vault…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Theme.background)
+                } else {
+                    emptyVault
+                }
             } else {
                 // File rows set selection explicitly because nested DisclosureGroup rows do
                 // not reliably emit List selection events on iOS.
