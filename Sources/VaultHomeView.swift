@@ -24,9 +24,13 @@ struct VaultHomeView: View {
                 #if os(iOS)
                 photoCaptureSection
                 #endif
-                inboxSection
-                recentSection
-                categoriesSection
+                if isLoadingHomeSnapshot {
+                    loadingCard
+                } else {
+                    inboxSection
+                    recentSection
+                    categoriesSection
+                }
             }
             .padding(22)
             // The Vault container owns the floating action button, including the compact
@@ -92,6 +96,15 @@ struct VaultHomeView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
         .appCard()
+    }
+
+    private var isLoadingHomeSnapshot: Bool {
+        // Keep an existing snapshot visible during a refresh, but do not present empty-state
+        // cards while the first tree/metadata pass is still in flight.
+        !store.didRestoreVault
+            || (store.rootURL != nil
+                && store.isHomeSnapshotLoading
+                && store.homeSnapshot == .empty)
     }
 
     private var inboxSection: some View {

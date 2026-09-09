@@ -510,6 +510,7 @@ struct ImageFileView: View {
     let url: URL
     @State private var image: Image?
     @State private var didFinishLoading = false
+    @State private var loadRequestGate = DocumentLoadRequestGate()
 
     var body: some View {
         Group {
@@ -528,12 +529,13 @@ struct ImageFileView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: url) {
+            let loadRequest = loadRequestGate.begin(for: url)
             didFinishLoading = false
             image = nil
             let data = await Task.detached(priority: .utility) {
                 try? Data(contentsOf: url)
             }.value
-            guard !Task.isCancelled else { return }
+            guard loadRequestGate.accepts(loadRequest) else { return }
             if let data, let decoded = Image(platformData: data) {
                 image = decoded
             }

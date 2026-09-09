@@ -15,6 +15,7 @@ struct MarkdownPreview: View {
 
     @State private var renderItems: [MarkdownRenderItem] = []
     @State private var isParsing = true
+    @State private var renderRequestGate = PreviewRequestGate()
 
     var body: some View {
         Group {
@@ -36,15 +37,17 @@ struct MarkdownPreview: View {
         }
         .background(Theme.background)
         .task(id: markdown) {
+            let renderRequest = renderRequestGate.begin()
             isParsing = true
             renderItems = []
             let source = markdown
             let rendered = await Task.detached(priority: .utility) {
                 MarkdownPreviewRenderer.render(source)
             }.value
-            // A detached parser does not inherit cancellation. The owning SwiftUI task
-            // still tells us whether a newer edit replaced this render request.
-            guard !Task.isCancelled else { return }
+            // A navigation transition can cancel the SwiftUI task after the detached parser
+            // has started. Apply a still-current result even then; only a newer render request
+            // is allowed to leave this view in a loading state.
+            guard renderRequestGate.accepts(renderRequest) else { return }
             renderItems = rendered
             isParsing = false
         }
@@ -286,6 +289,7 @@ private struct LocalMarkdownImageView: View {
 
     @State private var image: Image?
     @State private var didFinishLoading = false
+    @State private var loadRequestGate = PreviewRequestGate()
 
     init(url: URL? = nil,
          source: String,
@@ -320,6 +324,7 @@ private struct LocalMarkdownImageView: View {
             }
         }
         .task(id: lookupID) {
+            let loadRequest = loadRequestGate.begin()
             didFinishLoading = false
             image = nil
 
@@ -334,7 +339,8 @@ private struct LocalMarkdownImageView: View {
                 }.value
             }
 
-            guard !Task.isCancelled, let resolvedURL else {
+            guard loadRequestGate.accepts(loadRequest), let resolvedURL else {
+                guard loadRequestGate.accepts(loadRequest) else { return }
                 didFinishLoading = true
                 return
             }
@@ -342,7 +348,7 @@ private struct LocalMarkdownImageView: View {
             let data = await Task.detached(priority: .utility) {
                 try? Data(contentsOf: resolvedURL)
             }.value
-            guard !Task.isCancelled else { return }
+            guard loadRequestGate.accepts(loadRequest) else { return }
             if let data, let decoded = Image(platformData: data) {
                 image = decoded
             }
@@ -353,6 +359,26 @@ private struct LocalMarkdownImageView: View {
     private var lookupID: String {
         [source, url?.path ?? "", documentURL?.path ?? "", vaultRootURL?.path ?? ""]
             .joined(separator: "\u{1F}")
+    }
+}
+
+/// A cancellation-resistant token for detached preview work. SwiftUI can cancel a task during
+/// a navigation transition even though the current view still needs the result; a newer token,
+/// not cancellation alone, determines whether a result is stale.
+private struct PreviewRequestGate {
+    struct Request: Equatable {
+        fileprivate let generation: UInt64
+    }
+
+    private var generation: UInt64 = 0
+
+    mutating func begin() -> Request {
+        generation &+= 1
+        return Request(generation: generation)
+    }
+
+    func accepts(_ request: Request) -> Bool {
+        request.generation == generation
     }
 }
 
