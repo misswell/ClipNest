@@ -16,6 +16,10 @@ struct SettingsView: View {
     @State private var preferredLanguage: String
     @State private var apiKey: String
     @State private var aiSettingsSaved = false
+    @State private var imageUsesSeparateEndpoint: Bool
+    @State private var imageBaseURL: String
+    @State private var imageModel: String
+    @State private var imageAPIKey: String
 
     @AppStorage(ClipNestSettings.autoClassify) private var autoClassify = true
     @AppStorage(ClipNestSettings.allowNewCategories) private var allowNewCategories = false
@@ -26,6 +30,7 @@ struct SettingsView: View {
     @State private var showSwitchVaultConfirmation = false
     @State private var pendingVaultURL: URL?
     @State private var showCloseVaultConfirmation = false
+    @State private var showTrash = false
     @State private var iconPreference = AppIconPreference.system
 
     init() {
@@ -34,6 +39,11 @@ struct SettingsView: View {
         _aiModel = State(initialValue: configuration.model)
         _preferredLanguage = State(initialValue: configuration.preferredLanguage.rawValue)
         _apiKey = State(initialValue: configuration.apiKey)
+        let imageConfiguration = AIConfigurationStore.loadImageConfiguration()
+        _imageUsesSeparateEndpoint = State(initialValue: imageConfiguration.usesSeparateEndpoint)
+        _imageBaseURL = State(initialValue: imageConfiguration.baseURL)
+        _imageModel = State(initialValue: imageConfiguration.model)
+        _imageAPIKey = State(initialValue: imageConfiguration.apiKey)
     }
 
     var body: some View {
@@ -64,6 +74,13 @@ struct SettingsView: View {
                         showSwitchVaultConfirmation = true
                     } label: {
                         Label("Open Another Folder…", systemImage: "folder.badge.plus")
+                    }
+                    .padding(.vertical, 13)
+                    rowDivider
+                    Button {
+                        showTrash = true
+                    } label: {
+                        Label("Trash", systemImage: "trash")
                     }
                     .padding(.vertical, 13)
                     rowDivider
@@ -168,7 +185,32 @@ struct SettingsView: View {
                         }
                     }
                     .padding(.vertical, 13)
-                    Text("ClipNest uses an OpenAI-compatible Chat Completions API and stores the API key in the system Keychain.")
+                    rowDivider
+                    Toggle(isOn: $imageUsesSeparateEndpoint) {
+                        Label("Use a separate model for photos", systemImage: "photo.tv")
+                    }
+                    .padding(.vertical, 13)
+                    if imageUsesSeparateEndpoint {
+                        TextField("Image Base URL", text: $imageBaseURL)
+                            .textFieldStyle(.plain)
+                            .textContentType(.URL)
+                            .autocorrectionDisabled()
+                            .padding(.vertical, 13)
+                        rowDivider
+                        TextField("Image Model", text: $imageModel)
+                            .textFieldStyle(.plain)
+                            .autocorrectionDisabled()
+                            .padding(.vertical, 13)
+                        rowDivider
+                        SecureField("Image API Key (stored in Keychain)", text: $imageAPIKey)
+                            .textFieldStyle(.plain)
+                            .autocorrectionDisabled()
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            #endif
+                            .padding(.vertical, 13)
+                    }
+                    Text("When enabled, photos are sent directly to the image model (it must support images). When off, photos are only OCR-read on device and the recognized text goes to the text model.")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
                         .padding(.bottom, 13)
@@ -193,6 +235,10 @@ struct SettingsView: View {
                 .onChange(of: aiModel) { _, _ in aiSettingsSaved = false }
                 .onChange(of: preferredLanguage) { _, _ in aiSettingsSaved = false }
                 .onChange(of: apiKey) { _, _ in aiSettingsSaved = false }
+        .onChange(of: imageUsesSeparateEndpoint) { _, _ in aiSettingsSaved = false }
+        .onChange(of: imageBaseURL) { _, _ in aiSettingsSaved = false }
+        .onChange(of: imageModel) { _, _ in aiSettingsSaved = false }
+        .onChange(of: imageAPIKey) { _, _ in aiSettingsSaved = false }
 
                 sectionCard("CLASSIFICATION") {
                     Toggle(isOn: $autoClassify) {
@@ -253,6 +299,10 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Theme.background)
+        .sheet(isPresented: $showTrash) {
+            TrashView()
+                .environmentObject(store)
+        }
         .alert("Switch Vault?", isPresented: $showSwitchVaultConfirmation) {
             Button("Choose Folder") {
                 if let pendingVaultURL {
@@ -295,6 +345,12 @@ struct SettingsView: View {
                 model: aiModel,
                 preferredLanguage: PreferredLanguage(rawValue: preferredLanguage) ?? .automatic
             )
+        )
+        AIConfigurationStore.saveImageConfiguration(
+            AIImageConfiguration(usesSeparateEndpoint: imageUsesSeparateEndpoint,
+                                 baseURL: imageBaseURL,
+                                 apiKey: imageAPIKey,
+                                 model: imageModel)
         )
         aiSettingsSaved = true
     }

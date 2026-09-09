@@ -10,6 +10,9 @@ enum ClipNestSettings {
     static let aiBaseURL = "ai.baseURL"
     static let aiModel = "ai.model"
     static let aiPreferredLanguage = "ai.preferredLanguage"
+    static let aiImageSeparateEndpoint = "ai.image.separateEndpoint"
+    static let aiImageBaseURL = "ai.image.baseURL"
+    static let aiImageModel = "ai.image.model"
 
     static let autoClassify = "classification.autoClassify"
     static let allowNewCategories = "classification.allowNewCategories"
@@ -22,6 +25,7 @@ enum ClipNestSettings {
 
     static let keychainService = "com.tertiaryinfotech.clipnest"
     static let keychainAccount = "openai-compatible-api-key"
+    static let aiImageKeychainAccount = "openai-compatible-image-api-key"
 }
 
 enum ClipboardProcessingMode: String, CaseIterable, Identifiable {

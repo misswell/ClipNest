@@ -18,7 +18,15 @@ struct VaultDocumentMove: Equatable {
 /// a high-frequency UI action and must not invalidate the entire recursive explorer tree.
 @MainActor
 final class VaultSelection: ObservableObject {
-    @Published var fileURL: URL?
+    enum DocumentSource {
+        case manual          // user tapped the row themselves
+        case quickPaste      // auto-opened right after a capture saved
+    }
+
+    @Published var fileURL: URL? {
+        didSet { documentSource = .manual }
+    }
+    @Published var documentSource: DocumentSource = .manual
 }
 
 /// Owns the currently-open Obsidian-compatible vault (a local folder), its file tree,
@@ -44,6 +52,9 @@ final class VaultStore: ObservableObject {
     /// Changes only when the asynchronous home snapshot has been replaced. Views can use this
     /// cheap token instead of comparing a potentially tens-of-thousands-item array.
     @Published private(set) var homeSnapshotRevision: UInt64 = 0
+    /// False from app launch until the saved vault has been restored (or the no-vault
+    /// outcome is known). Loading surfaces use it to avoid flashing empty states.
+    @Published private(set) var didRestoreVault = false
     /// Tree and metadata reads for a refresh happen off the main actor. This lets loading
     /// surfaces show the previous snapshot (when available) instead of blocking navigation.
     @Published private(set) var isHomeSnapshotLoading = false
@@ -183,6 +194,7 @@ final class VaultStore: ObservableObject {
     }
 
     func restoreVaultIfNeeded() {
+        defer { didRestoreVault = true }
         guard rootURL == nil else { return }
         // First-ever launch with no saved vault: seed the sample vault for onboarding.
         if UserDefaults.standard.data(forKey: Keys.bookmark) == nil {
@@ -213,6 +225,7 @@ final class VaultStore: ObservableObject {
         rootURL = url
         if stale { saveBookmark(for: url) }
         addRecent(url)
+        VaultTrash.purgeOlderThan(Date().addingTimeInterval(-VaultTrash.autoPurgeInterval), in: url)
         refresh()
         startWatching(url)
     }
@@ -220,6 +233,7 @@ final class VaultStore: ObservableObject {
     func closeVault() {
         stopWatching()
         stopAccessing()
+        didRestoreVault = true
         treeBuildTask?.cancel()
         homeSnapshotTask?.cancel()
         rootURL = nil
@@ -631,9 +645,40 @@ final class VaultStore: ObservableObject {
     }
 
     func delete(_ url: URL) {
-        try? FileManager.default.trashOrRemove(url)
+        // Vault items go to the in-vault recycle bin so mistakes can be restored;
+        // anything outside the vault still falls back to the system behavior.
+        var trashed = false
+        if let root = rootURL, VaultTrash.isInside(url, root: root) {
+            trashed = (try? VaultTrash.moveToTrash(url, in: root)) != nil
+        }
+        if !trashed {
+            try? FileManager.default.trashOrRemove(url)
+        }
         removeChildOrderPaths(under: url)
         if selectedFileURL == url { selectedFileURL = nil }
+        refresh()
+    }
+
+    func trashEntries() -> [TrashEntry] {
+        guard let rootURL else { return [] }
+        return VaultTrash.existingEntries(in: rootURL)
+    }
+
+    func restoreFromTrash(_ entry: TrashEntry) {
+        guard let rootURL else { return }
+        try? VaultTrash.restore(entry, in: rootURL)
+        refresh()
+    }
+
+    func purgeFromTrash(_ entry: TrashEntry) {
+        guard let rootURL else { return }
+        try? VaultTrash.purge(entry, in: rootURL)
+        refresh()
+    }
+
+    func purgeAllTrash() {
+        guard let rootURL else { return }
+        try? VaultTrash.purgeAll(in: rootURL)
         refresh()
     }
 
@@ -841,6 +886,7 @@ private enum VaultFileTreeBuilder {
             nodes.reserveCapacity(contents.count)
 
             for childURL in contents {
+                guard childURL.lastPathComponent != VaultTrash.directoryName else { continue }
                 guard configuration.showHiddenFiles || !childURL.lastPathComponent.hasPrefix(".") else {
                     continue
                 }

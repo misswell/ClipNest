@@ -6,6 +6,7 @@ import AppKit
 /// "/" slash-command menu for inserting Markdown snippets and emoji at the caret.
 struct CodeEditorView: NSViewRepresentable {
     @Binding var text: String
+    let documentID: URL
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -16,7 +17,7 @@ struct CodeEditorView: NSViewRepresentable {
         scroll.drawsBackground = true
         scroll.backgroundColor = bg
 
-        let tv = scroll.documentView as! NSTextView
+        guard let tv = scroll.documentView as? NSTextView else { return scroll }
         tv.delegate = context.coordinator
         tv.isEditable = false
         tv.isSelectable = true
@@ -37,12 +38,17 @@ struct CodeEditorView: NSViewRepresentable {
         context.coordinator.textView = tv
         // Do not assign a large document to NSTextView during view creation. Hydration is
         // chunked across run-loop turns so the editor can appear without blocking tab changes.
-        context.coordinator.startHydration(text, in: tv)
+        context.coordinator.startHydration(text, in: tv, documentID: documentID)
         return scroll
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let tv = nsView.documentView as? NSTextView else { return }
+        if context.coordinator.documentID != documentID
+            || (context.coordinator.isHydrating && context.coordinator.hydratingValue != text) {
+            context.coordinator.startHydration(text, in: tv, documentID: documentID)
+            return
+        }
         guard !context.coordinator.isHydrating else { return }
         if tv.string != text {
             let sel = tv.selectedRange()
@@ -62,6 +68,9 @@ struct CodeEditorView: NSViewRepresentable {
         private var pendingSlash = 0
         private var highlightWorkItem: DispatchWorkItem?
         private var hydrationTask: Task<Void, Never>?
+        private(set) var documentID: URL?
+        private(set) var hydratingValue = ""
+        private var hydrationGeneration: UInt64 = 0
         private(set) var isHydrating = false
 
         init(_ parent: CodeEditorView) { self.parent = parent }
@@ -71,8 +80,12 @@ struct CodeEditorView: NSViewRepresentable {
             hydrationTask?.cancel()
         }
 
-        func startHydration(_ value: String, in textView: NSTextView) {
+        func startHydration(_ value: String, in textView: NSTextView, documentID: URL) {
             hydrationTask?.cancel()
+            hydrationGeneration &+= 1
+            let generation = hydrationGeneration
+            self.documentID = documentID
+            hydratingValue = value
             isHydrating = true
             textView.isEditable = false
             textView.string = ""
@@ -84,7 +97,10 @@ struct CodeEditorView: NSViewRepresentable {
                 let chunkSize = 8_192
 
                 while index < value.endIndex {
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled,
+                          self.hydrationGeneration == generation,
+                          self.documentID == documentID
+                    else { return }
                     let end = value.index(
                         index,
                         offsetBy: chunkSize,
@@ -103,7 +119,10 @@ struct CodeEditorView: NSViewRepresentable {
                     }
                 }
 
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled,
+                      self.hydrationGeneration == generation,
+                      self.documentID == documentID
+                else { return }
                 self.isHydrating = false
                 textView.isEditable = true
                 self.scheduleHighlight(after: 0.16)

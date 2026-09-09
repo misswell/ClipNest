@@ -80,6 +80,20 @@ struct VaultHomeView: View {
     }
     #endif
 
+    /// Shown while the first home snapshot is being built, so the page never flashes
+    /// its "no data" placeholders before real content arrives.
+    private var loadingCard: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+            Text("Loading…")
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedInk)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .appCard()
+    }
+
     private var inboxSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("Inbox", systemImage: "tray.fill")

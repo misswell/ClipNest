@@ -327,6 +327,7 @@ final class ClipNestLogicTests: XCTestCase {
         defaults.removeObject(forKey: ClipNestSettings.lastClipboardChangeCount)
         defaults.removeObject(forKey: ClipNestSettings.lastClipboardHash)
         defaults.removeObject(forKey: ClipNestSettings.lastAttemptedClipboardHash)
+        PendingCaptureStore.removeAll()
 
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipNestCoordinatorTests-\(UUID().uuidString)", isDirectory: true)
@@ -355,6 +356,10 @@ final class ClipNestLogicTests: XCTestCase {
 
     @MainActor
     func testCoordinatorGeneratesAndSavesAutomatically() async throws {
+        let savedPendingCaptures = PendingCaptureStore.load()
+        PendingCaptureStore.removeAll()
+        defer { PendingCaptureStore.save(savedPendingCaptures) }
+
         let defaults = UserDefaults.standard
         let keys = [
             ClipNestSettings.autoDetectClipboard,

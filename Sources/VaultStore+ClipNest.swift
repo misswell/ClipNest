@@ -113,6 +113,7 @@ extension VaultStore {
         }
         refresh()
         selectedFileURL = url
+        selection.documentSource = .quickPaste
         return url
     }
 
@@ -138,6 +139,7 @@ extension VaultStore {
         }
         refresh()
         selectedFileURL = url
+        selection.documentSource = .quickPaste
         return url
     }
 

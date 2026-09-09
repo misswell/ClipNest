@@ -107,9 +107,7 @@ private struct VaultNavigationHost: View {
     #if os(iOS)
     private var pickPhotoAction: () -> Void {
         {
-            NSLog("VV: pickPhotoAction fired, setting sidebarPhotoPicker = true")
             sidebarPhotoPicker = true
-            NSLog("VV: sidebarPhotoPicker now = %d", sidebarPhotoPicker ? 1 : 0)
         }
     }
     #else
@@ -206,23 +204,18 @@ private struct VaultNavigationHost: View {
         Button {
             Task { await captureCoordinator.reprocessClipboard() }
         } label: {
-            HStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(Theme.primary)
+                    .frame(width: 56, height: 56)
                 if captureCoordinator.isProcessing {
                     ProgressView()
                         .tint(.white)
+                } else {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.white)
                 }
-                Image(systemName: "doc.on.clipboard")
-                    .font(.subheadline.weight(.bold))
-                Text("Quick Paste")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .frame(height: 54)
-            .background(Theme.primary, in: Capsule())
-            .overlay {
-                Capsule()
-                    .strokeBorder(.white.opacity(0.22), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
         }
@@ -234,6 +227,7 @@ private struct VaultNavigationHost: View {
 
     private func selectFile(_ url: URL) {
         guard navigationSelection != url else { return }
+        guard !withinTabSwitchGrace else { return }
         navigationSelection = url
         // Keep service code (capture/wiki actions) pointed at the same file without making the
         // navigation state wait for the global selection publisher.

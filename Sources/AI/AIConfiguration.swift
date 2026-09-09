@@ -25,6 +25,19 @@ struct AIConfiguration: Equatable {
     }
 }
 
+/// Endpoint used for photo captures. When `usesSeparateEndpoint` is false the text
+/// model configuration is reused and photos are processed as recognized text only.
+struct AIImageConfiguration: Equatable {
+    var usesSeparateEndpoint: Bool
+    var baseURL: String
+    var apiKey: String
+    var model: String
+
+    var isValid: Bool {
+        AIConfiguration(baseURL: baseURL, apiKey: apiKey, model: model, preferredLanguage: .automatic).isValid
+    }
+}
+
 enum AIConfigurationStore {
     static func load() -> AIConfiguration {
         let defaults = UserDefaults.standard
@@ -50,6 +63,39 @@ enum AIConfigurationStore {
         defaults.set(configuration.preferredLanguage.rawValue,
                      forKey: ClipNestSettings.aiPreferredLanguage)
         saveAPIKey(configuration.apiKey)
+    }
+
+    // MARK: - Image model (photo captures)
+
+    static func loadImageConfiguration() -> AIImageConfiguration {
+        let defaults = UserDefaults.standard
+        return AIImageConfiguration(
+            usesSeparateEndpoint: defaults.bool(forKey: ClipNestSettings.aiImageSeparateEndpoint),
+            baseURL: defaults.string(forKey: ClipNestSettings.aiImageBaseURL)
+                ?? AIConfiguration.default.baseURL,
+            apiKey: KeychainStore.read(service: ClipNestSettings.keychainService,
+                                        account: ClipNestSettings.aiImageKeychainAccount) ?? "",
+            model: defaults.string(forKey: ClipNestSettings.aiImageModel) ?? ""
+        )
+    }
+
+    static func saveImageConfiguration(_ configuration: AIImageConfiguration) {
+        let defaults = UserDefaults.standard
+        defaults.set(configuration.usesSeparateEndpoint,
+                     forKey: ClipNestSettings.aiImageSeparateEndpoint)
+        defaults.set(configuration.baseURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                     forKey: ClipNestSettings.aiImageBaseURL)
+        defaults.set(configuration.model.trimmingCharacters(in: .whitespacesAndNewlines),
+                     forKey: ClipNestSettings.aiImageModel)
+        let value = configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.isEmpty {
+            KeychainStore.delete(service: ClipNestSettings.keychainService,
+                                  account: ClipNestSettings.aiImageKeychainAccount)
+        } else {
+            _ = KeychainStore.save(value,
+                                   service: ClipNestSettings.keychainService,
+                                   account: ClipNestSettings.aiImageKeychainAccount)
+        }
     }
 
     static func saveAPIKey(_ apiKey: String) {

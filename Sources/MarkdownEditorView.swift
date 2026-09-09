@@ -37,24 +37,30 @@ struct MarkdownEditorView: View {
     @State private var reloadAttempt = 0
     @State private var loadRequestGate = DocumentLoadRequestGate()
     @State private var showDeleteConfirmation = false
+    @State private var showMoreActions = false
     @Environment(\.horizontalSizeClass) private var hSize
 
     private var isWide: Bool { hSize != .compact }
 
+    private var normalizedURL: URL { url.standardizedFileURL }
+
     private var mode: EditorMode {
-        EditorMode(rawValue: storedMode) ?? .edit
+        let stored = EditorMode(rawValue: storedMode) ?? .edit
+        return !isWide && stored == .split ? .edit : stored
     }
 
-    private var modeBinding: Binding<EditorMode> {
-        Binding(
-            get: { EditorMode(rawValue: storedMode) ?? .edit },
-            set: { storedMode = $0.rawValue }
-        )
+    private var availableModes: [EditorMode] {
+        EditorMode.allCases.filter { isWide || $0 != .split }
     }
 
     private struct LoadKey: Equatable {
         let url: URL
         let attempt: Int
+
+        init(url: URL, attempt: Int) {
+            self.url = url.standardizedFileURL
+            self.attempt = attempt
+        }
     }
 
     var body: some View {
@@ -63,11 +69,11 @@ struct MarkdownEditorView: View {
             // view performs synchronous text-container setup even when its initial text is
             // empty, which is enough to hitch the transition on a real device. Mount it only
             // after the detached read has completed.
-            if isEditorReady, hasLoadedText, loadedURL == url {
+            if isEditorReady, hasLoadedText, loadedURL == normalizedURL {
                 editorContent
             } else if loadError != nil {
                 loadFailureView
-            } else if hasLoadedText, loadedURL == url {
+            } else if hasLoadedText, loadedURL == normalizedURL {
                 // This state is kept as a safety net for an interrupted load. Do not render a
                 // second scroll view here: mounting it during a navigation push causes another
                 // layout pass and was the remaining source of the visible hitch.
@@ -85,7 +91,7 @@ struct MarkdownEditorView: View {
         .toolbar {
             // Keep the segmented control and delete action out of the push transaction together
             // with TextEditor until the document has finished loading.
-            if isEditorReady, hasLoadedText, loadedURL == url {
+            if isEditorReady, hasLoadedText, loadedURL == normalizedURL {
                 toolbarContent
             }
         }
@@ -97,6 +103,15 @@ struct MarkdownEditorView: View {
         } message: {
             Text("This note will be removed from the vault.")
         }
+        .confirmationDialog("More", isPresented: $showMoreActions) {
+            Button("Delete Note", role: .destructive) {
+                showDeleteConfirmation = true
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+        .onAppear {
+            normalizeStoredMode()
+        }
         .task(id: LoadKey(url: url, attempt: reloadAttempt)) {
             // Detached iCloud reads can finish after a newer document has already loaded. Give
             // this request a generation before the first suspension so stale results can never
@@ -105,7 +120,7 @@ struct MarkdownEditorView: View {
             // The host view is reused when the user switches notes, so `url` is already the
             // NEW document here while `text` still holds the previous one. Flush that pending
             // edit to its own file — never to the newly selected document.
-            if let previous = loadedURL, previous != url, text != loadedTextSnapshot {
+            if let previous = loadedURL, previous != normalizedURL, text != loadedTextSnapshot {
                 store.save(text, to: previous)
             }
             saveTask?.cancel()
@@ -120,7 +135,7 @@ struct MarkdownEditorView: View {
             // the expensive native text-container setup back into the transition.
             await Task.yield()
             guard loadRequestGate.accepts(loadRequest) else { return }
-            let target = url
+            let target = normalizedURL
             let readTask = Task.detached(priority: .utility) {
                 Result { try VaultStore.readText(at: target) }
             }
@@ -140,7 +155,7 @@ struct MarkdownEditorView: View {
             case .success(let loadedText):
                 loadedTextSnapshot = loadedText
                 text = loadedText
-                loadedURL = url
+                loadedURL = target
                 hasLoadedText = true
                 isEditorReady = true
             case .failure(let error):
@@ -196,7 +211,7 @@ struct MarkdownEditorView: View {
     }
 
     private var editor: some View {
-        InsertableTextEditor(text: $text)
+        InsertableTextEditor(text: $text, documentID: normalizedURL)
             .font(.system(.body, design: .monospaced))
             .onChange(of: text) { _, newValue in
                 guard hasLoadedText, newValue != loadedTextSnapshot else { return }
@@ -209,31 +224,62 @@ struct MarkdownEditorView: View {
     private var preview: some View {
         MarkdownPreview(
             markdown: text,
-            resolveImage: { src in store.resolveImageURL(src, relativeTo: url) },
-            documentURL: url,
+            resolveImage: { src in store.resolveImageURL(src, relativeTo: normalizedURL) },
+            documentURL: normalizedURL,
             vaultRootURL: store.rootURL)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Picker("View", selection: modeBinding) {
-                ForEach(EditorMode.allCases.filter { isWide || $0 != .split }) { m in
-                    Image(systemName: m.systemImage).tag(m)
+        // Keep all actions in one item and use plain buttons. A segmented Picker adds its own
+        // capsule, which the iOS navigation bar then wraps in another capsule.
+        ToolbarItem(placement: .primaryAction) {
+            HStack(spacing: 14) {
+                ForEach(availableModes) { candidate in
+                    Button {
+                        storedMode = candidate.rawValue
+                    } label: {
+                        Image(systemName: candidate.systemImage)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(mode == candidate ? Theme.accent : Theme.ink)
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(candidate.rawValue)
+                    .accessibilityAddTraits(mode == candidate ? .isSelected : [])
+                }
+
+                if store.selection.documentSource == .quickPaste {
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Delete Note")
+                    .help("Delete Note")
+                } else {
+                    Button {
+                        showMoreActions = true
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 17, weight: .bold))
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More")
                 }
             }
-            .pickerStyle(.segmented)
-            .frame(width: isWide ? 130 : 88)
-
-            Button(role: .destructive) {
-                showDeleteConfirmation = true
-            } label: {
-                Image(systemName: "trash")
-            }
-            .accessibilityLabel("Delete Note")
-            .help("Delete Note")
+            .fixedSize()
         }
+    }
+
+    private func normalizeStoredMode() {
+        guard !isWide, storedMode == EditorMode.split.rawValue else { return }
+        storedMode = EditorMode.edit.rawValue
     }
 
     private func deleteCurrentNote() {
@@ -289,9 +335,11 @@ struct MarkdownEditorView: View {
 /// in case we later swap in a richer editor with cursor-aware insertion).
 private struct InsertableTextEditor: View {
     @Binding var text: String
+    let documentID: URL
+
     var body: some View {
         #if os(iOS)
-        ProgressiveTextEditor(text: $text)
+        ProgressiveTextEditor(text: $text, documentID: documentID)
         #else
         TextEditor(text: $text)
             .scrollContentBackground(.hidden)
@@ -307,6 +355,7 @@ private struct InsertableTextEditor: View {
 /// short hydration window, then becomes a normal editable text view with the complete source.
 private struct ProgressiveTextEditor: UIViewRepresentable {
     @Binding var text: String
+    let documentID: URL
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
@@ -325,11 +374,19 @@ private struct ProgressiveTextEditor: UIViewRepresentable {
         view.autocapitalizationType = .sentences
         view.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
         view.textContainer.lineFragmentPadding = 0
-        context.coordinator.startHydration(text, in: view)
+        context.coordinator.startHydration(text, in: view, documentID: documentID)
         return view
     }
 
     func updateUIView(_ view: UITextView, context: Context) {
+        // A NavigationSplitView can reuse the same UITextView for a different note. Cancel the
+        // old hydration before it can finish by writing the previous document into this view.
+        if context.coordinator.documentID != documentID
+            || (context.coordinator.isHydrating && context.coordinator.hydratingValue != text) {
+            context.coordinator.startHydration(text, in: view, documentID: documentID)
+            return
+        }
+
         // The binding already contains the complete source while the text view is being
         // hydrated. Do not replace its progressively-built text with the full source here.
         guard !context.coordinator.isHydrating else { return }
@@ -345,6 +402,9 @@ private struct ProgressiveTextEditor: UIViewRepresentable {
         let text: Binding<String>
         weak var textView: UITextView?
         private var hydrationTask: Task<Void, Never>?
+        private(set) var documentID: URL?
+        private(set) var hydratingValue = ""
+        private var hydrationGeneration: UInt64 = 0
         private(set) var isHydrating = false
 
         init(text: Binding<String>) {
@@ -355,8 +415,12 @@ private struct ProgressiveTextEditor: UIViewRepresentable {
             hydrationTask?.cancel()
         }
 
-        func startHydration(_ value: String, in view: UITextView) {
+        func startHydration(_ value: String, in view: UITextView, documentID: URL) {
             hydrationTask?.cancel()
+            hydrationGeneration &+= 1
+            let generation = hydrationGeneration
+            self.documentID = documentID
+            hydratingValue = value
             textView = view
             isHydrating = true
             view.isEditable = false
@@ -368,7 +432,10 @@ private struct ProgressiveTextEditor: UIViewRepresentable {
                 let chunkSize = 8_192
 
                 while index < value.endIndex {
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled,
+                          self.hydrationGeneration == generation,
+                          self.documentID == documentID
+                    else { return }
                     let end = value.index(
                         index,
                         offsetBy: chunkSize,
@@ -389,7 +456,10 @@ private struct ProgressiveTextEditor: UIViewRepresentable {
                     }
                 }
 
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled,
+                      self.hydrationGeneration == generation,
+                      self.documentID == documentID
+                else { return }
                 self.isHydrating = false
                 view.isEditable = true
                 view.setNeedsLayout()

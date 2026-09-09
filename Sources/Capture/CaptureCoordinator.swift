@@ -56,6 +56,25 @@ final class CaptureCoordinator: ObservableObject {
             store.restoreVaultIfNeeded()
         }
         await processClipboardIfNeeded()
+        await retryPendingCaptures()
+    }
+
+    /// Captures that were interrupted (app quit mid-request) are re-run here, oldest
+    /// first. A job that fails again stays queued for the next launch.
+    func retryPendingCaptures() async {
+        let pending = PendingCaptureStore.load()
+        guard !pending.isEmpty, !isRunning else { return }
+
+        showsStatusBanner = true
+        state = .detecting
+        statusMessage = String(localized: "Retrying unfinished captures…")
+
+        for job in pending {
+            guard !isRunning else { break }
+            statusMessage = String(localized: "Retrying unfinished capture…")
+            await captureText(job.rawText)
+            if state == .failed { break }   // surface the error once; job stays queued
+        }
     }
 
     /// Called whenever the scene returns to the foreground. Clipboard access stays inside
@@ -116,6 +135,9 @@ final class CaptureCoordinator: ObservableObject {
     }
 
     func cancelPendingDraft() {
+        if let hash = pendingDraft?.clipboardHash {
+            PendingCaptureStore.remove(hash: hash)
+        }
         pendingDraft = nil
         state = .idle
         statusMessage = String(localized: "Save canceled. The clipboard content is untouched.")
@@ -231,75 +253,87 @@ final class CaptureCoordinator: ObservableObject {
     }
 
     /// The shared note-organization pipeline behind clipboard and photo captures:
-    /// AI generation → classification → save (or stage for confirmation).
+    /// queue → AI generation → classification → save (or stage for confirmation).
+    /// A failed request stays in the queue and is retried on the next launch.
     private func generateAndSave(_ snapshot: ClipboardSnapshot) async {
         // Record an attempt before making a network request. A foreground/background cycle
         // during a failing request must not start another request for the same hash.
         defaults.set(snapshot.hash, forKey: ClipNestSettings.lastAttemptedClipboardHash)
+        PendingCaptureStore.add(hash: snapshot.hash,
+                                rawText: snapshot.content.rawText,
+                                source: "capture")
 
         do {
-            state = .analyzing
-            statusMessage = String(localized: "Analyzing content…")
-            let categories = store.topLevelCategories()
-            let configuration = AIConfigurationStore.load()
-            state = .generating
-            statusMessage = String(localized: "Generating note…")
-            let generated: GeneratedNote
-            if let noteGenerator {
-                generated = try await noteGenerator.generate(
-                    from: snapshot.content,
-                    existingCategories: categories,
-                    preferredLanguage: configuration.preferredLanguage
-                )
-            } else {
-                generated = try await NoteGenerationService(configuration: configuration)
-                    .generate(from: snapshot.content,
-                              existingCategories: categories,
-                              preferredLanguage: configuration.preferredLanguage)
-            }
-
-            state = .classifying
-            statusMessage = String(localized: "Classifying…")
-            let finalCategories = store.topLevelCategories()
-            let category = ClassificationService().classify(
-                note: generated,
-                existingCategories: finalCategories,
-                configuration: .load()
-            )
-            var note = generated
-            note.category = category
-
-            let mode = ClipboardProcessingMode(
-                rawValue: defaults.string(forKey: ClipNestSettings.processingMode)
-                    ?? ClipboardProcessingMode.automatic.rawValue
-            ) ?? .automatic
-            if mode == .confirmBeforeSave {
-                pendingDraft = GeneratedNoteDraft(note: note, snapshot: snapshot)
-                isRunning = false
-                state = .completed
-                statusMessage = String(localized: "Note generated — confirm to save")
-                return
-            }
-
-            state = .saving
-            statusMessage = String(localized: "Saving to \(category)…")
-            let url = try await store.saveGeneratedNote(note: note,
-                                                         originalContent: snapshot.content)
-            markProcessed(snapshot.hash)
-            lastSavedURL = url
-            state = .completed
-            statusMessage = String(localized: "Saved to \(category)")
-            scheduleBannerDismissal()
+            let generated = try await generateNote(for: snapshot)
+            try await classifyAndSave(generated, snapshot: snapshot)
         } catch is CancellationError {
             state = .idle
             statusMessage = ""
             showsStatusBanner = false
+            isRunning = false
         } catch {
             state = .failed
             statusMessage = String(localized: "Capture failed")
             showsStatusBanner = false
             errorMessage = message(for: error)
+            // Keep the job queued — it is retried automatically on the next launch.
+            isRunning = false
         }
+    }
+
+    private func generateNote(for snapshot: ClipboardSnapshot) async throws -> GeneratedNote {
+        state = .analyzing
+        statusMessage = String(localized: "Analyzing content…")
+        let categories = store.topLevelCategories()
+        let configuration = AIConfigurationStore.load()
+        state = .generating
+        statusMessage = String(localized: "Generating note…")
+        if let noteGenerator {
+            return try await noteGenerator.generate(
+                from: snapshot.content,
+                existingCategories: categories,
+                preferredLanguage: configuration.preferredLanguage
+            )
+        }
+        return try await NoteGenerationService(configuration: configuration)
+            .generate(from: snapshot.content,
+                      existingCategories: categories,
+                      preferredLanguage: configuration.preferredLanguage)
+    }
+
+    private func classifyAndSave(_ generated: GeneratedNote, snapshot: ClipboardSnapshot) async throws {
+        state = .classifying
+        statusMessage = String(localized: "Classifying…")
+        let finalCategories = store.topLevelCategories()
+        let category = ClassificationService().classify(
+            note: generated,
+            existingCategories: finalCategories,
+            configuration: .load()
+        )
+        var note = generated
+        note.category = category
+
+        let mode = ClipboardProcessingMode(
+            rawValue: defaults.string(forKey: ClipNestSettings.processingMode)
+                ?? ClipboardProcessingMode.automatic.rawValue
+        ) ?? .automatic
+        if mode == .confirmBeforeSave {
+            pendingDraft = GeneratedNoteDraft(note: note, snapshot: snapshot)
+            isRunning = false
+            state = .completed
+            statusMessage = String(localized: "Note generated — confirm to save")
+            return
+        }
+
+        state = .saving
+        statusMessage = String(localized: "Saving to \(category)…")
+        let url = try await store.saveGeneratedNote(note: note,
+                                                     originalContent: snapshot.content)
+        markProcessed(snapshot.hash)
+        lastSavedURL = url
+        state = .completed
+        statusMessage = String(localized: "Saved to \(category)")
+        scheduleBannerDismissal()
         isRunning = false
     }
 
@@ -345,10 +379,49 @@ final class CaptureCoordinator: ObservableObject {
     private func finishPhotoCapture(_ image: UIImage) async {
         state = .analyzing
         statusMessage = String(localized: "Recognizing text in photo…")
-        let text = (try? await Task.detached(priority: .utility) {
+        let ocrText = (try? await Task.detached(priority: .utility) {
             try PhotoCaptureService.recognizeText(in: image)
         }.value) ?? ""
-        guard let content = ClipboardContent(text: text) else {
+
+        // When a separate image model is configured, send the photo to it directly
+        // (vision). Otherwise the OCR text flows into the text model pipeline.
+        let imageConfig = AIConfigurationStore.loadImageConfiguration()
+        if imageConfig.usesSeparateEndpoint {
+            let imageAI = AIConfiguration(baseURL: imageConfig.baseURL,
+                                          apiKey: imageConfig.apiKey,
+                                          model: imageConfig.model,
+                                          preferredLanguage: AIConfigurationStore.load().preferredLanguage)
+            if imageAI.isValid, let jpegData = image.jpegData(compressionQuality: 0.6) {
+                state = .generating
+                statusMessage = String(localized: "Reading photo with image model…")
+                do {
+                    let provider = OpenAICompatibleProvider(configuration: imageAI)
+                    let generated = try await provider.generateVisionNote(
+                        imageData: jpegData,
+                        ocrText: ocrText,
+                        existingCategories: store.topLevelCategories(),
+                        preferredLanguage: AIConfigurationStore.load().preferredLanguage)
+                    let anchorText = ocrText.isEmpty ? String(localized: "(photo)") : ocrText
+                    guard let anchorContent = ClipboardContent(text: anchorText) else {
+                        isRunning = false
+                        state = .idle
+                        return
+                    }
+                    let snapshot = ClipboardSnapshot(
+                        content: anchorContent,
+                        changeCount: defaults.integer(forKey: ClipNestSettings.lastClipboardChangeCount),
+                        hash: ClipboardContent.hash(for: ocrText.isEmpty ? "photo:\(Date().timeIntervalSince1970)" : ocrText))
+                    lastSnapshot = snapshot
+                    try await classifyAndSave(generated, snapshot: snapshot)
+                    return
+                } catch {
+                    // Fall through to the OCR + text-model pipeline.
+                    statusMessage = String(localized: "Image model failed — falling back to text model…")
+                }
+            }
+        }
+
+        guard let content = ClipboardContent(text: ocrText) else {
             isRunning = false
             state = .idle
             statusMessage = String(localized: "No readable text was found in the photo")
@@ -373,6 +446,7 @@ final class CaptureCoordinator: ObservableObject {
     private func markProcessed(_ hash: String) {
         defaults.set(hash, forKey: ClipNestSettings.lastClipboardHash)
         defaults.set(hash, forKey: ClipNestSettings.lastAttemptedClipboardHash)
+        PendingCaptureStore.remove(hash: hash)
     }
 
     private var automaticDetectionEnabled: Bool {

@@ -18,14 +18,21 @@ struct EditorPane: View {
     @State private var reloadAttempt = 0
     @State private var loadRequestGate = DocumentLoadRequestGate()
 
+    private var normalizedURL: URL { url.standardizedFileURL }
+
     private struct LoadKey: Equatable {
         let url: URL
         let attempt: Int
+
+        init(url: URL, attempt: Int) {
+            self.url = url.standardizedFileURL
+            self.attempt = attempt
+        }
     }
 
     var body: some View {
         ZStack {
-            if isEditorReady, hasLoadedText, loadedURL == url {
+            if isEditorReady, hasLoadedText, loadedURL == normalizedURL {
                 // Keep the native NSTextView out of the transition. Its initial layout and
                 // syntax storage setup are synchronous, even when the document is empty.
                 editorContent
@@ -41,7 +48,7 @@ struct EditorPane: View {
             let loadRequest = loadRequestGate.begin(for: url)
             // The host view is reused across tabs; flush the previous document's pending edit
             // to its own file — never to the newly selected one.
-            if let previous = loadedURL, previous != url, text != loadedTextSnapshot {
+            if let previous = loadedURL, previous != normalizedURL, text != loadedTextSnapshot {
                 store.save(text, to: previous)
             }
             saveTask?.cancel()
@@ -53,7 +60,7 @@ struct EditorPane: View {
             loadError = nil
             await Task.yield()
             guard loadRequestGate.accepts(loadRequest) else { return }
-            let target = url
+            let target = normalizedURL
             let readTask = Task.detached(priority: .utility) {
                 Result { try VaultStore.readText(at: target) }
             }
@@ -69,7 +76,7 @@ struct EditorPane: View {
             case .success(let loadedText):
                 loadedTextSnapshot = loadedText
                 text = loadedText
-                loadedURL = url
+                loadedURL = target
                 hasLoadedText = true
                 isEditorReady = true
             case .failure(let error):
@@ -119,7 +126,7 @@ struct EditorPane: View {
     }
 
     private var rawEditor: some View {
-        CodeEditorView(text: $text)
+        CodeEditorView(text: $text, documentID: normalizedURL)
             .background(VSCode.editorBg)
             .onChange(of: text) { _, v in
                 guard hasLoadedText, v != loadedTextSnapshot else { return }
@@ -131,8 +138,8 @@ struct EditorPane: View {
     private var preview: some View {
         MarkdownPreview(
             markdown: text,
-            resolveImage: { store.resolveImageURL($0, relativeTo: url) },
-            documentURL: url,
+            resolveImage: { store.resolveImageURL($0, relativeTo: normalizedURL) },
+            documentURL: normalizedURL,
             vaultRootURL: store.rootURL,
             onToggleCheckbox: toggleCheckbox)
     }
@@ -158,7 +165,7 @@ struct EditorPane: View {
             }
         }
         text = lines.joined(separator: "\n")
-        store.save(text, to: url)
+        store.save(text, to: normalizedURL)
     }
 
     private func schedule(_ value: String) {

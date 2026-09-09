@@ -5,6 +5,10 @@ import XCTest
 /// pipeline as clipboard content — generate → classify → save into the vault.
 @MainActor
 final class PhotoCapturePipelineTests: XCTestCase {
+    override func setUpWithError() throws {
+        PendingCaptureStore.removeAll()
+    }
+
     private struct StubGenerator: NoteGenerating {
         func generate(from content: ClipboardContent,
                       existingCategories: [String],

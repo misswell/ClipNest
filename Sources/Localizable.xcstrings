@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "(photo)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "（照片）"
+          }
+        }
+      }
+    },
     "AI configuration is incomplete. Check the API key, base URL, and model.": {
       "localizations": {
         "zh-Hans": {
@@ -661,6 +671,26 @@
         }
       }
     },
+    "Delete Permanently": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "彻底删除"
+          }
+        }
+      }
+    },
+    "Deleted notes and folders are kept here for 30 days.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已删除的笔记和文件夹会在这里保留 30 天。"
+          }
+        }
+      }
+    },
     "Detecting clipboard": {
       "localizations": {
         "zh-Hans": {
@@ -697,6 +727,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "扩展"
+          }
+        }
+      }
+    },
+    "Empty Trash": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清空回收站"
+          }
+        }
+      }
+    },
+    "Empty Trash?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认清空回收站？"
+          }
+        }
+      }
+    },
+    "Everything in the trash will be permanently deleted.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回收站中的所有内容将被永久删除。"
           }
         }
       }
@@ -777,6 +837,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "图片"
+          }
+        }
+      }
+    },
+    "Image API Key (stored in Keychain)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片 API Key（保存在钥匙串）"
+          }
+        }
+      }
+    },
+    "Image Base URL": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片 Base URL"
+          }
+        }
+      }
+    },
+    "Image Model": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片模型"
+          }
+        }
+      }
+    },
+    "Image model failed — falling back to text model…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片模型识别失败，已回退到文字模型…"
           }
         }
       }
@@ -901,6 +1001,16 @@
         }
       }
     },
+    "Loading…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载中…"
+          }
+        }
+      }
+    },
     "Manage": {
       "localizations": {
         "zh-Hans": {
@@ -921,6 +1031,16 @@
         }
       }
     },
+    "Markdown documents will appear here in chronological order.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown 文档会按时间顺序显示在这里。"
+          }
+        }
+      }
+    },
     "Match content": {
       "localizations": {
         "zh-Hans": {
@@ -937,6 +1057,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mermaid 图表"
+          }
+        }
+      }
+    },
+    "More": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多"
           }
         }
       }
@@ -997,6 +1127,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "检测到新的剪贴板内容，可在设置中手动整理"
+          }
+        }
+      }
+    },
+    "No Markdown Notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无 Markdown 笔记"
           }
         }
       }
@@ -1151,6 +1291,16 @@
         }
       }
     },
+    "Open a vault from the Vault tab to see its documents here.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在 Vault 标签页打开一个 Vault。"
+          }
+        }
+      }
+    },
     "Original Clipboard": {
       "localizations": {
         "zh-Hans": {
@@ -1241,6 +1391,16 @@
         }
       }
     },
+    "Quick Paste": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速粘贴"
+          }
+        }
+      }
+    },
     "RECENT VAULTS": {
       "localizations": {
         "zh-Hans": {
@@ -1281,6 +1441,16 @@
         }
       }
     },
+    "Reading photo with image model…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在用图片模型读取照片…"
+          }
+        }
+      }
+    },
     "Recent Notes": {
       "localizations": {
         "zh-Hans": {
@@ -1307,6 +1477,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "刷新"
+          }
+        }
+      }
+    },
+    "Refresh Timeline": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新时间线"
           }
         }
       }
@@ -1381,12 +1561,42 @@
         }
       }
     },
+    "Restore": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复"
+          }
+        }
+      }
+    },
     "Retry": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "重试"
+          }
+        }
+      }
+    },
+    "Retrying unfinished captures…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在继续上次未完成的整理…"
+          }
+        }
+      }
+    },
+    "Retrying unfinished capture…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在继续未完成的整理…"
           }
         }
       }
@@ -1741,6 +1951,16 @@
         }
       }
     },
+    "Text recognized on the photo (for reference):\n%@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "照片上识别出的文字（供参考）：\n%@"
+          }
+        }
+      }
+    },
     "Text recognized — organizing…": {
       "localizations": {
         "zh-Hans": {
@@ -1841,6 +2061,16 @@
         }
       }
     },
+    "This item will be permanently deleted.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该项目将被永久删除。"
+          }
+        }
+      }
+    },
     "This note will be removed from the vault.": {
       "localizations": {
         "zh-Hans": {
@@ -1857,6 +2087,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "这个 Vault 是空的。\n用 + 新建笔记。"
+          }
+        }
+      }
+    },
+    "Timeline": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "时间线"
           }
         }
       }
@@ -1931,6 +2171,26 @@
         }
       }
     },
+    "Trash": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回收站"
+          }
+        }
+      }
+    },
+    "Trash is empty": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回收站是空的"
+          }
+        }
+      }
+    },
     "Turn this vault into a self-maintaining knowledge wiki. Drop sources into `raw/`, then let Claude Code read them and keep `wiki/` — entity & concept pages, `[[links]]`, the index, and the log — up to date.": {
       "localizations": {
         "zh-Hans": {
@@ -1971,12 +2231,32 @@
         }
       }
     },
+    "Unknown Date": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未知日期"
+          }
+        }
+      }
+    },
     "Unknown error": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "未知错误"
+          }
+        }
+      }
+    },
+    "Unknown time": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未知时间"
           }
         }
       }
@@ -1997,6 +2277,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "不支持的文件"
+          }
+        }
+      }
+    },
+    "Use a separate model for photos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "照片使用单独的模型"
+          }
+        }
+      }
+    },
+    "Use the floating Quick Paste button to capture the current clipboard content.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点击右下角的快速粘贴按钮，捕获当前剪贴板内容。"
           }
         }
       }
@@ -2047,6 +2347,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "关闭自动分类或无法匹配时使用默认分类；否则内容会保存到 Inbox。"
+          }
+        }
+      }
+    },
+    "When enabled, photos are sent directly to the image model (it must support images). When off, photos are only OCR-read on device and the recognized text goes to the text model.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启后，照片直接发给图片模型识别（需支持读图）。关闭时照片仅在本机识别文字，识别结果交给文字模型。"
           }
         }
       }
@@ -2127,96 +2437,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "缺少标题"
-          }
-        }
-      }
-    },
-    "Markdown documents will appear here in chronological order.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Markdown 文档会按时间顺序显示在这里。"
-          }
-        }
-      }
-    },
-    "No Markdown Notes": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂无 Markdown 笔记"
-          }
-        }
-      }
-    },
-    "Open a vault from the Vault tab to see its documents here.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请先在 Vault 标签页打开一个 Vault。"
-          }
-        }
-      }
-    },
-    "Quick Paste": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "快速粘贴"
-          }
-        }
-      }
-    },
-    "Refresh Timeline": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "刷新时间线"
-          }
-        }
-      }
-    },
-    "Timeline": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "时间线"
-          }
-        }
-      }
-    },
-    "Unknown Date": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未知日期"
-          }
-        }
-      }
-    },
-    "Unknown time": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未知时间"
-          }
-        }
-      }
-    },
-    "Use the floating Quick Paste button to capture the current clipboard content.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "点击右下角的快速粘贴按钮，捕获当前剪贴板内容。"
           }
         }
       }
