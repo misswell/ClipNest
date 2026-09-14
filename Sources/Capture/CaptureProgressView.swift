@@ -35,13 +35,15 @@ struct CaptureProgressView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .frame(maxWidth: 430)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.hairline))
+        .background(Theme.card,
+                    in: RoundedRectangle(cornerRadius: AppMetrics.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: AppMetrics.cardRadius, style: .continuous)
+            .strokeBorder(Theme.hairline))
         .shadow(color: .black.opacity(0.12), radius: 12, y: 5)
         .padding(.horizontal, 14)
         .padding(.top, 8)
         .offset(y: dragOffset)
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: AppMetrics.cardRadius, style: .continuous))
         .gesture(
             DragGesture(minimumDistance: 10)
                 .onChanged { value in

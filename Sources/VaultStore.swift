@@ -67,6 +67,10 @@ final class VaultStore: ObservableObject {
     @Published var openVaultRequested = false
     @Published var newFileRequested = false
 
+    /// Where the next "Open Vault" panel should start. The Obsidian shortcut sets this so the
+    /// picker opens inside Obsidian's own folder rather than wherever the last vault lived.
+    @Published var openVaultStartingDirectory: URL?
+
     @Published var showHiddenFiles = false {
         didSet { UserDefaults.standard.set(showHiddenFiles, forKey: Keys.showHidden); refresh() }
     }
@@ -110,8 +114,13 @@ final class VaultStore: ObservableObject {
     private var childOrders: [String: [String]] = [:]
     /// Save requests are serialized off the main actor. A revision prevents an older
     /// debounced request from overwriting a newer edit when disk writes finish out of order.
-    private let fileWriter = VaultFileWriteCoordinator()
     private var saveRevisions: [String: UInt64] = [:]
+    /// Tracks the app's own writes so the FSEvents watcher can ignore the autosave that
+    /// triggered them instead of rebuilding the whole vault.
+    private var writeEventFilter = VaultWriteEventFilter()
+    /// Per-file metadata used to order the home / timeline snapshot. Shared with the
+    /// background snapshot builder so a refresh does not re-stat every note.
+    let metadataCache = VaultMetadataCache()
     private var treeBuildTask: Task<Void, Never>?
     private var homeSnapshotTask: Task<Void, Never>?
     private var isInitializing = true
@@ -133,7 +142,10 @@ final class VaultStore: ObservableObject {
     }
 
     // MARK: - Menu bridges
-    func requestOpenVault() { openVaultRequested = true }
+    func requestOpenVault(startingAt directory: URL? = nil) {
+        openVaultStartingDirectory = directory
+        openVaultRequested = true
+    }
     func requestNewFile() { newFileRequested = true }
 
     // MARK: - Opening / restoring a vault
@@ -358,8 +370,9 @@ final class VaultStore: ObservableObject {
                                           rootURL: URL) {
         homeSnapshotTask?.cancel()
         isHomeSnapshotLoading = true
+        let cache = metadataCache
         let worker = Task.detached(priority: .utility) {
-            VaultHomeSnapshotBuilder.makeCancellable(from: node)
+            VaultHomeSnapshotBuilder.makeCancellable(from: node, cache: cache)
         }
         homeSnapshotTask = Task { [weak self] in
             let snapshot = await withTaskCancellationHandler(operation: {
@@ -418,17 +431,24 @@ final class VaultStore: ObservableObject {
     /// deleted, or renamed by agents, git, Finder, the terminal — and refresh the tree.
     private func startWatching(_ url: URL) {
         stopWatching()
-        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
+        let callback: FSEventStreamCallback = { _, info, eventCount, eventPaths, eventFlags, _ in
             guard let info else { return }
             let store = Unmanaged<VaultStore>.fromOpaque(info).takeUnretainedValue()
-            Task { @MainActor in store.scheduleAutoRefresh() }
+            // kFSEventStreamCreateFlagUseCFTypes makes eventPaths an NSArray of CFString.
+            let paths = (unsafeBitCast(eventPaths, to: NSArray.self) as? [String]) ?? []
+            let flags = eventCount > 0
+                ? Array(UnsafeBufferPointer(start: eventFlags, count: eventCount))
+                : []
+            Task { @MainActor in store.handleFileSystemEvents(paths: paths, flags: flags) }
         }
         var context = FSEventStreamContext(
             version: 0,
             info: Unmanaged.passUnretained(self).toOpaque(),
             retain: nil, release: nil, copyDescription: nil)
         let flags = FSEventStreamCreateFlags(
-            kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagFileEvents)
+            kFSEventStreamCreateFlagNoDefer
+                | kFSEventStreamCreateFlagFileEvents
+                | kFSEventStreamCreateFlagUseCFTypes)
         guard let stream = FSEventStreamCreate(
             kCFAllocatorDefault, callback, &context,
             [url.path] as CFArray,
@@ -448,6 +468,37 @@ final class VaultStore: ObservableObject {
         fsStream = nil
     }
 
+    /// A batch of file-system events. Anything the app wrote itself is dropped; a structural
+    /// change (create / delete / rename / move) drops the whole metadata cache, while a plain
+    /// content change only invalidates the paths that actually changed.
+    func handleFileSystemEvents(paths: [String],
+                                flags: [FSEventStreamEventFlags]) {
+        guard !paths.isEmpty else {
+            scheduleAutoRefresh()
+            return
+        }
+        guard !writeEventFilter.isSelfWriteNoise(paths: paths) else { return }
+
+        if isStructuralChange(paths: paths, flags: flags) {
+            metadataCache.removeAll()
+        } else {
+            metadataCache.invalidate(paths: paths)
+        }
+        scheduleAutoRefresh()
+    }
+
+    private func isStructuralChange(paths: [String],
+                                    flags: [FSEventStreamEventFlags]) -> Bool {
+        guard flags.count == paths.count else { return true }
+        let structural: FSEventStreamEventFlags =
+            FSEventStreamEventFlags(kFSEventStreamEventFlagMustScanSubDirs)
+                | FSEventStreamEventFlags(kFSEventStreamEventFlagRootChanged)
+                | FSEventStreamEventFlags(kFSEventStreamEventFlagItemCreated)
+                | FSEventStreamEventFlags(kFSEventStreamEventFlagItemRemoved)
+                | FSEventStreamEventFlags(kFSEventStreamEventFlagItemRenamed)
+        return flags.contains { $0 & structural != 0 }
+    }
+
     /// Debounce rapid change bursts into a single refresh.
     func scheduleAutoRefresh() {
         autoRefreshWork?.cancel()
@@ -462,62 +513,52 @@ final class VaultStore: ObservableObject {
 
     // MARK: - Reading / writing
 
-    /// Reading failures surfaced in the editor UI instead of a silent empty document.
-    enum VaultReadError: LocalizedError {
-        case iCloudDownloadTimedOut
-        case readFailed(underlying: Error)
-
-        var errorDescription: String? {
-            switch self {
-            case .iCloudDownloadTimedOut:
-                return String(localized: "The file has not finished downloading from iCloud (timed out). Check your connection and try again.")
-            case .readFailed(let underlying):
-                return underlying.localizedDescription
-            }
-        }
-    }
-
-    nonisolated static func readText(at url: URL) throws -> String {
-        // A vault inside iCloud Drive (e.g. the Obsidian container) may expose dataless
-        // placeholder files on iOS. Reading those fails outright, so request the download
-        // and wait until the contents are current before reading.
-        let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
-        if values?.isUbiquitousItem == true,
-           values?.ubiquitousItemDownloadingStatus != URLUbiquitousItemDownloadingStatus.current {
-            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-            let deadline = Date().addingTimeInterval(30)
-            var downloaded = false
-            while Date() < deadline {
-                if let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus,
-                   status == .current {
-                    downloaded = true
-                    break
-                }
-                Thread.sleep(forTimeInterval: 0.25)
-            }
-            if !downloaded {
-                throw VaultReadError.iCloudDownloadTimedOut
-            }
-        }
-        do {
-            return try String(contentsOf: url, encoding: .utf8)
-        } catch {
-            throw VaultReadError.readFailed(underlying: error)
-        }
-    }
-
-    func loadText(_ url: URL) -> String {
-        (try? Self.readText(at: url)) ?? ""
+    /// Reads a document through the shared vault access layer (iCloud materialisation +
+    /// `NSFileCoordinator`). Errors are surfaced by the editor rather than swallowed into an
+    /// empty document.
+    func loadText(_ url: URL) async throws -> String {
+        try await VaultFileAccess.shared.readText(at: url)
     }
 
     func save(_ text: String, to url: URL) {
         let key = url.standardizedFileURL.path
         let revision = (saveRevisions[key] ?? 0) + 1
         saveRevisions[key] = revision
-        let writer = fileWriter
+        // Remember this write so the FSEvents watcher can drop the event it is about to
+        // receive instead of rebuilding the whole vault for our own autosave.
+        noteInternalWrite(to: url)
+        applySelfWriteToSnapshot(url: url)
         Task.detached(priority: .utility) {
-            await writer.write(Data(text.utf8), to: url, revision: revision)
+            try? await VaultFileAccess.shared.write(Data(text.utf8), to: url, revision: revision)
         }
+    }
+
+    /// Records a write the app performed itself so the macOS FSEvents watcher ignores the
+    /// event it is about to receive, and so the next metadata pass re-reads this one file.
+    func noteInternalWrite(to url: URL, at date: Date = Date()) {
+        writeEventFilter.noteWrite(to: url, at: date)
+        metadataCache.invalidate(paths: [url.path])
+    }
+
+    /// A finished write only moves one note in the newest-first home snapshot. Re-ordering the
+    /// in-memory array is O(n) pointer moves, versus the metadata sweep a full refresh costs.
+    func applySelfWriteToSnapshot(url: URL, date: Date = Date()) {
+        let items = homeSnapshot.timelineItems
+        guard let index = items.firstIndex(where: {
+            $0.url.standardizedFileURL == url.standardizedFileURL
+        }) else { return }
+
+        var reordered = items
+        reordered.remove(at: index)
+        let insertion = reordered.firstIndex { $0.date < date } ?? reordered.endIndex
+        reordered.insert(VaultTimelineItem(url: url, date: date), at: insertion)
+        guard reordered != items else { return }
+
+        homeSnapshot = VaultHomeSnapshot(markdownFiles: reordered.map(\.url),
+                                         timelineItems: reordered,
+                                         inboxFile: homeSnapshot.inboxFile,
+                                         categories: homeSnapshot.categories)
+        homeSnapshotRevision &+= 1
     }
 
     /// All directories in the current vault, in the same depth-first order as the tree.
@@ -628,6 +669,7 @@ final class VaultStore: ObservableObject {
         if (name as NSString).pathExtension.isEmpty { name += ".md" }
         let url = uniqueURL(in: dir, name: name)
         FileManager.default.createFile(atPath: url.path, contents: Data("# \(url.deletingPathExtension().lastPathComponent)\n\n".utf8))
+        noteInternalWrite(to: url)
         refresh()
         selectedFileURL = url
         return url
@@ -640,6 +682,7 @@ final class VaultStore: ObservableObject {
         if name.isEmpty { name = "New Folder" }
         let url = uniqueURL(in: dir, name: name)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        noteInternalWrite(to: url)
         refresh()
         return url
     }
@@ -946,19 +989,5 @@ private extension FileManager {
         } catch {
             try removeItem(at: url)
         }
-    }
-}
-
-/// Performs potentially blocking atomic writes away from the UI executor and preserves the
-/// order of edits for each document. The actor is intentionally scoped to one VaultStore so
-/// tests and separate app sessions do not share mutable write state.
-private actor VaultFileWriteCoordinator {
-    private var latestRevision: [String: UInt64] = [:]
-
-    func write(_ data: Data, to url: URL, revision: UInt64) {
-        let key = url.standardizedFileURL.path
-        guard revision >= (latestRevision[key] ?? 0) else { return }
-        latestRevision[key] = revision
-        try? data.write(to: url, options: .atomic)
     }
 }

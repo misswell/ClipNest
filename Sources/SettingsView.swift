@@ -33,6 +33,14 @@ struct SettingsView: View {
     @State private var showTrash = false
     @State private var iconPreference = AppIconPreference.system
 
+    /// Obsidian shortcut state.
+    @State private var showObsidianSheet = false
+    @State private var obsidianVaults: [ObsidianVault] = []
+    @State private var isScanningObsidian = false
+    /// Set by the sheet, run once it has finished dismissing — the folder picker and the
+    /// switch confirmation both have to come up *after* the sheet is gone.
+    @State private var pendingObsidianAction: ObsidianAction?
+
     init() {
         let configuration = AIConfigurationStore.load()
         _aiBaseURL = State(initialValue: configuration.baseURL)
@@ -48,7 +56,7 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: AppMetrics.sectionSpacing) {
                 Text("Settings").font(.largeTitle.bold())
 
                 // Vault
@@ -67,7 +75,7 @@ struct SettingsView: View {
                         .help("Rename this vault")
                         .disabled(store.rootURL == nil)
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     Button {
                         pendingVaultURL = nil
@@ -75,21 +83,43 @@ struct SettingsView: View {
                     } label: {
                         Label("Open Another Folder…", systemImage: "folder.badge.plus")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
+                    rowDivider
+                    Button {
+                        beginObsidianScan()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Label("Obsidian Vault…", systemImage: "square.stack.3d.up")
+                            Spacer(minLength: 8)
+                            if isScanningObsidian {
+                                ProgressView().controlSize(.small)
+                            } else if !obsidianVaults.isEmpty {
+                                Text("\(obsidianVaults.count)")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.mutedInk)
+                            }
+                        }
+                    }
+                    .disabled(isScanningObsidian)
+                    .padding(.vertical, AppMetrics.rowVertical)
+                    Text("Jump straight to the vaults Obsidian keeps in its default folders (iCloud Drive ▸ Obsidian).")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                        .padding(.bottom, AppMetrics.rowVertical)
                     rowDivider
                     Button {
                         showTrash = true
                     } label: {
                         Label("Trash", systemImage: "trash")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     Button(role: .destructive) {
                         showCloseVaultConfirmation = true
                     } label: {
                         Label("Close Vault", systemImage: "xmark.circle")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                 }
 
                 // Recent vaults — one-click switching, Obsidian-style.
@@ -133,30 +163,30 @@ struct SettingsView: View {
                     Toggle(isOn: $autoDetectClipboard) {
                         Label("Auto-Detect Clipboard", systemImage: "doc.on.clipboard")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     Toggle(isOn: $autoGenerateNote) {
                         Label("Auto-Generate Notes", systemImage: "sparkles")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     Picker("Processing Mode", selection: $processingMode) {
                         ForEach(ClipboardProcessingMode.allCases) { mode in
                             Text(mode.title).tag(mode.rawValue)
                         }
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     Text(ClipboardProcessingMode(rawValue: processingMode)?.description ?? "")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
-                        .padding(.bottom, 13)
+                        .padding(.bottom, AppMetrics.rowVertical)
                     rowDivider
                     Button {
                         Task { await captureCoordinator.reprocessClipboard() }
                     } label: {
                         Label("Reprocess Current Clipboard", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                 }
 
                 sectionCard("AI") {
@@ -164,12 +194,12 @@ struct SettingsView: View {
                         .textFieldStyle(.plain)
                         .textContentType(.URL)
                         .autocorrectionDisabled()
-                        .padding(.vertical, 13)
+                        .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     TextField("Model", text: $aiModel)
                         .textFieldStyle(.plain)
                         .autocorrectionDisabled()
-                        .padding(.vertical, 13)
+                        .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     SecureField("API Key (stored in Keychain)", text: $apiKey)
                         .textFieldStyle(.plain)
@@ -177,30 +207,30 @@ struct SettingsView: View {
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         #endif
-                        .padding(.vertical, 13)
+                        .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     Picker("Output Language", selection: $preferredLanguage) {
                         ForEach(PreferredLanguage.allCases) { language in
                             Text(language.title).tag(language.rawValue)
                         }
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     Toggle(isOn: $imageUsesSeparateEndpoint) {
                         Label("Use a separate model for photos", systemImage: "photo.tv")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     if imageUsesSeparateEndpoint {
                         TextField("Image Base URL", text: $imageBaseURL)
                             .textFieldStyle(.plain)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
-                            .padding(.vertical, 13)
+                            .padding(.vertical, AppMetrics.rowVertical)
                         rowDivider
                         TextField("Image Model", text: $imageModel)
                             .textFieldStyle(.plain)
                             .autocorrectionDisabled()
-                            .padding(.vertical, 13)
+                            .padding(.vertical, AppMetrics.rowVertical)
                         rowDivider
                         SecureField("Image API Key (stored in Keychain)", text: $imageAPIKey)
                             .textFieldStyle(.plain)
@@ -208,12 +238,12 @@ struct SettingsView: View {
                             #if os(iOS)
                             .textInputAutocapitalization(.never)
                             #endif
-                            .padding(.vertical, 13)
+                            .padding(.vertical, AppMetrics.rowVertical)
                     }
                     Text("When enabled, photos are sent directly to the image model (it must support images). When off, photos are only OCR-read on device and the recognized text goes to the text model.")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
-                        .padding(.bottom, 13)
+                        .padding(.bottom, AppMetrics.rowVertical)
                     rowDivider
                     HStack(spacing: 12) {
                         Button {
@@ -229,7 +259,7 @@ struct SettingsView: View {
                         }
                         Spacer()
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                 }
                 .onChange(of: aiBaseURL) { _, _ in aiSettingsSaved = false }
                 .onChange(of: aiModel) { _, _ in aiSettingsSaved = false }
@@ -244,20 +274,20 @@ struct SettingsView: View {
                     Toggle(isOn: $autoClassify) {
                         Label("Auto-Classify", systemImage: "folder.badge.gearshape")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     Toggle(isOn: $allowNewCategories) {
                         Label("Allow New Categories", systemImage: "folder.badge.plus")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     TextField("Default Category", text: $defaultCategory)
                         .textFieldStyle(.plain)
-                        .padding(.vertical, 13)
+                        .padding(.vertical, AppMetrics.rowVertical)
                     Text("When auto-classification is off or nothing matches, the default category is used; otherwise content is saved to Inbox.")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
-                        .padding(.bottom, 13)
+                        .padding(.bottom, AppMetrics.rowVertical)
                 }
 
                 // Display
@@ -265,18 +295,18 @@ struct SettingsView: View {
                     Toggle(isOn: $store.showHiddenFiles) {
                         Label("Show Hidden Files", systemImage: "eye")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     rowDivider
                     Toggle(isOn: $previewDefault) {
                         Label("Open Notes in Preview", systemImage: "doc.text.image")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     #if os(macOS)
                     rowDivider
                     Toggle(isOn: $multipleTabs) {
                         Label("Show Multiple Editor Tabs", systemImage: "rectangle.split.3x1")
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     #endif
                 }
 
@@ -287,17 +317,34 @@ struct SettingsView: View {
                             Text(preference.title).tag(preference)
                         }
                     }
-                    .padding(.vertical, 13)
+                    .padding(.vertical, AppMetrics.rowVertical)
                     Text("Follow the system light/dark appearance, or pin an icon regardless of it. iOS asks for confirmation when the icon changes.")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
-                        .padding(.bottom, 13)
+                        .padding(.bottom, AppMetrics.rowVertical)
                 }
             }
-            .padding(22)
-            .frame(maxWidth: 640)
+            .padding(.horizontal, AppMetrics.screenHorizontal)
+            .padding(.top, AppMetrics.screenTop)
+            .padding(.bottom, AppMetrics.sectionSpacing)
+            .frame(maxWidth: AppMetrics.contentMaxWidth)
             .frame(maxWidth: .infinity)
         }
+        .sheet(isPresented: $showObsidianSheet, onDismiss: runPendingObsidianAction) {
+            ObsidianVaultSheet(
+                vaults: obsidianVaults,
+                currentVaultURL: store.rootURL,
+                onSwitch: { url in
+                    pendingObsidianAction = .switchTo(url)
+                    showObsidianSheet = false
+                },
+                onBrowse: {
+                    pendingObsidianAction = .browse
+                    showObsidianSheet = false
+                }
+            )
+        }
+        .bottomTabBarExclusion()
         .background(Theme.background)
         .sheet(isPresented: $showTrash) {
             TrashView()
@@ -337,6 +384,45 @@ struct SettingsView: View {
         // Bridge the importer used elsewhere — settings just toggles the request flag.
     }
 
+    // MARK: - Obsidian shortcut
+
+    /// What the Obsidian sheet asked for, replayed after it dismisses.
+    private enum ObsidianAction {
+        case switchTo(URL)
+        case browse
+    }
+
+    /// Scan Obsidian's default folders off the main actor, then show what we found.
+    private func beginObsidianScan() {
+        guard !isScanningObsidian else { return }
+        isScanningObsidian = true
+        let recent = store.recentVaults
+        let current = store.rootURL?.standardizedFileURL
+        Task {
+            let found = await Task.detached(priority: .userInitiated) {
+                ObsidianVaultLocator.discoverVaults(includingRecent: recent)
+            }.value
+            obsidianVaults = found.filter { $0.url.standardizedFileURL != current }
+            isScanningObsidian = false
+            showObsidianSheet = true
+        }
+    }
+
+    private func runPendingObsidianAction() {
+        guard let action = pendingObsidianAction else { return }
+        pendingObsidianAction = nil
+        switch action {
+        case .switchTo(let url):
+            pendingVaultURL = url
+            showSwitchVaultConfirmation = true
+        case .browse:
+            // Land the picker inside Obsidian's own folder when we know where it is, so the
+            // shortcut stays a shortcut even on the fallback path.
+            store.requestOpenVault(startingAt: ObsidianVaultLocator.defaultRoots
+                .first { FileManager.default.fileExists(atPath: $0.path) })
+        }
+    }
+
     private func saveAISettings() {
         AIConfigurationStore.save(
             AIConfiguration(
@@ -368,15 +454,17 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 content()
             }
-            .padding(.horizontal, 16)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
+            .padding(.horizontal, AppMetrics.cardPadding)
+            .background(Theme.card,
+                        in: RoundedRectangle(cornerRadius: AppMetrics.cardRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: AppMetrics.cardRadius, style: .continuous)
+                .strokeBorder(Theme.hairline))
             .tint(Theme.accent)
         }
     }
 
     /// Divider aligned with the row text instead of bleeding to the card edge.
     private var rowDivider: some View {
-        Divider().padding(.leading, 16)
+        Divider().padding(.leading, AppMetrics.cardPadding)
     }
 }

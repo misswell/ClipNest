@@ -16,6 +16,18 @@ struct MarkdownPreview: View {
     @State private var renderItems: [MarkdownRenderItem] = []
     @State private var isParsing = true
     @State private var renderRequestGate = PreviewRequestGate()
+    /// The document the currently displayed `renderItems` belong to. Used to tell "the user is
+    /// typing in this note" (safe to debounce and keep the old body on screen) apart from "the
+    /// host switched to another note" (must clear immediately, never show the previous note).
+    @State private var renderedDocument: URL?
+
+    /// Coalesces a typing burst so only the version the user pauses on is parsed.
+    private static let parseDebounceNanoseconds: UInt64 = 140_000_000
+
+    private struct RenderKey: Equatable {
+        let markdown: String
+        let document: URL?
+    }
 
     var body: some View {
         Group {
@@ -29,17 +41,29 @@ struct MarkdownPreview: View {
                             view(for: item.block, checkboxStart: item.checkboxStart)
                         }
                     }
-                    .padding(20)
+                    .padding(.horizontal, AppMetrics.screenHorizontal)
+                    .padding(.top, AppMetrics.screenTop)
+                    .padding(.bottom, AppMetrics.sectionSpacing)
+                    .frame(maxWidth: AppMetrics.contentMaxWidth, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                 }
             }
         }
         .background(Theme.background)
-        .task(id: markdown) {
+        .task(id: RenderKey(markdown: markdown, document: documentURL)) {
             let renderRequest = renderRequestGate.begin()
-            isParsing = true
-            renderItems = []
+            if renderedDocument == documentURL {
+                // Same note: wait for the typing to pause, then parse the latest revision.
+                try? await Task.sleep(nanoseconds: Self.parseDebounceNanoseconds)
+                guard !Task.isCancelled else { return }
+            } else {
+                // Different note: drop the previous body before the first suspension so it can
+                // never be on screen under the new title.
+                isParsing = true
+                renderItems = []
+            }
+            guard renderRequestGate.accepts(renderRequest) else { return }
             let source = markdown
             let rendered = await Task.detached(priority: .utility) {
                 MarkdownPreviewRenderer.render(source)
@@ -50,6 +74,7 @@ struct MarkdownPreview: View {
             guard renderRequestGate.accepts(renderRequest) else { return }
             renderItems = rendered
             isParsing = false
+            renderedDocument = documentURL
         }
     }
 
@@ -287,7 +312,7 @@ private struct LocalMarkdownImageView: View {
     let documentURL: URL?
     let vaultRootURL: URL?
 
-    @State private var image: Image?
+    @State private var image: PlatformImage?
     @State private var didFinishLoading = false
     @State private var loadRequestGate = PreviewRequestGate()
 
@@ -304,7 +329,7 @@ private struct LocalMarkdownImageView: View {
     var body: some View {
         Group {
             if let image {
-                image.resizable()
+                Image(platformImage: image).resizable()
                     .scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else if didFinishLoading {
@@ -340,18 +365,17 @@ private struct LocalMarkdownImageView: View {
             }
 
             guard loadRequestGate.accepts(loadRequest), let resolvedURL else {
-                guard loadRequestGate.accepts(loadRequest) else { return }
                 didFinishLoading = true
                 return
             }
 
-            let data = await Task.detached(priority: .utility) {
-                try? Data(contentsOf: resolvedURL)
-            }.value
+            // Reads through the vault access layer (iCloud placeholders download) and the
+            // shared cache, and downsamples to the size a note actually displays.
+            let decoded = await VaultImageLoader.image(
+                for: resolvedURL,
+                maxPixelSize: VaultImageLoader.inlineMaxPixelSize)
             guard loadRequestGate.accepts(loadRequest) else { return }
-            if let data, let decoded = Image(platformData: data) {
-                image = decoded
-            }
+            image = decoded
             didFinishLoading = true
         }
     }

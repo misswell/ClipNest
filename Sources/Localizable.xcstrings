@@ -2440,6 +2440,86 @@
           }
         }
       }
+    },
+    "Obsidian Vault…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian Vault…"
+          }
+        }
+      }
+    },
+    "Obsidian Vaults": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian Vault"
+          }
+        }
+      }
+    },
+    "No Obsidian vault found yet": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有找到 Obsidian Vault"
+          }
+        }
+      }
+    },
+    "Pick the folder once with “Browse for Folder…” and ClipNest will offer it here from then on.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先用「浏览文件夹…」选中一次，之后 ClipNest 就会把它列在这里。"
+          }
+        }
+      }
+    },
+    "Browse for Folder…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浏览文件夹…"
+          }
+        }
+      }
+    },
+    "Obsidian keeps vaults in iCloud Drive ▸ Obsidian, or on this device under Obsidian. ClipNest opens that folder in place — nothing is copied or moved.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian 的 Vault 存放在 iCloud Drive ▸ Obsidian，或本机的 Obsidian 目录下。ClipNest 会就地打开该文件夹，不复制、不移动任何文件。"
+          }
+        }
+      }
+    },
+    "Jump straight to the vaults Obsidian keeps in its default folders (iCloud Drive ▸ Obsidian).": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直接跳到 Obsidian 默认位置里的 Vault（iCloud Drive ▸ Obsidian），不用逐层翻文件夹。"
+          }
+        }
+      }
+    },
+    "Current": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

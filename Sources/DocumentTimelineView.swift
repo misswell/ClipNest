@@ -37,16 +37,15 @@ struct DocumentTimelineView: View {
             .navigationTitle("Timeline")
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    Button {
+                    AppToolbarIconButton(systemImage: "arrow.clockwise",
+                                         label: "Refresh Timeline") {
                         store.refresh()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
                     }
-                    .accessibilityLabel("Refresh Timeline")
                 }
             }
             .navigationDestination(for: URL.self) { url in
-                MarkdownEditorView(url: url)
+                // A timeline row is a browse action: always open the note in Preview.
+                MarkdownEditorView(url: url, intent: .view)
             }
         }
         .task {
@@ -89,7 +88,8 @@ struct DocumentTimelineView: View {
                     Text(section.title)
                         .font(.headline)
                         .foregroundStyle(Theme.ink)
-                        .padding(.top, section.id == timelineSections.first?.id ? 0 : 24)
+                        .padding(.top, section.id == timelineSections.first?.id
+                                 ? 0 : AppMetrics.sectionSpacing)
                         .padding(.bottom, 10)
 
                     ForEach(section.items) { item in
@@ -108,10 +108,11 @@ struct DocumentTimelineView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 24)
+            .padding(.horizontal, AppMetrics.screenHorizontal)
+            .padding(.top, AppMetrics.screenTop)
+            .padding(.bottom, AppMetrics.sectionSpacing)
         }
+        .bottomTabBarExclusion()
     }
 
     private func relativePath(for url: URL) -> String {
@@ -203,16 +204,18 @@ private struct TimelineDocumentRow: View, Equatable {
                 .font(.caption)
                 .foregroundStyle(Theme.mutedInk)
             }
-            .padding(14)
+            .padding(AppMetrics.cardPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Theme.card,
+                        in: RoundedRectangle(cornerRadius: AppMetrics.cardRadius,
+                                             style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: AppMetrics.cardRadius, style: .continuous)
                     .strokeBorder(Theme.hairline)
             }
         }
         .contentShape(Rectangle())
-        .padding(.bottom, 12)
+        .padding(.bottom, AppMetrics.rowSpacing)
         .overlay(alignment: .topLeading) {
             if !isLast {
                 // An overlay receives the finished row size without participating in its

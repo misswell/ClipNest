@@ -177,9 +177,8 @@ extension VaultStore {
     private func writeClipNest(_ text: String, to url: URL) async throws {
         let data = Data(text.utf8)
         do {
-            try await Task.detached(priority: .userInitiated) {
-                try data.write(to: url, options: .atomic)
-            }.value
+            try await VaultFileAccess.shared.write(data, to: url)
+            noteInternalWrite(to: url)
         } catch {
             throw ClipNestVaultError.cannotWriteNote
         }
@@ -198,15 +197,18 @@ extension VaultStore {
 /// expensive for iCloud-backed vaults, and tens of thousands of metadata reads must not block
 /// the navigation or scrolling surfaces.
 enum VaultHomeSnapshotBuilder {
-    static func make(from node: FileNode) -> VaultHomeSnapshot {
-        makeSnapshot(from: node, shouldCancel: { false }) ?? .empty
+    static func make(from node: FileNode,
+                     cache: VaultMetadataCache? = nil) -> VaultHomeSnapshot {
+        makeSnapshot(from: node, cache: cache, shouldCancel: { false }) ?? .empty
     }
 
-    static func makeCancellable(from node: FileNode) -> VaultHomeSnapshot? {
-        makeSnapshot(from: node, shouldCancel: { Task.isCancelled })
+    static func makeCancellable(from node: FileNode,
+                                cache: VaultMetadataCache? = nil) -> VaultHomeSnapshot? {
+        makeSnapshot(from: node, cache: cache, shouldCancel: { Task.isCancelled })
     }
 
     private static func makeSnapshot(from node: FileNode,
+                                     cache: VaultMetadataCache?,
                                      shouldCancel: @Sendable () -> Bool) -> VaultHomeSnapshot? {
         let rootChildren = node.isDirectory ? (node.children ?? []) : [node]
         let topLevelDirectories = node.isDirectory
@@ -242,8 +244,13 @@ enum VaultHomeSnapshotBuilder {
             }
             guard current.node.isMarkdown else { continue }
 
-            let date = (try? current.node.url.resourceValues(forKeys: [.contentModificationDateKey]))?
-                .contentModificationDate ?? .distantPast
+            let date: Date
+            if let cache {
+                date = cache.modificationDate(for: current.node.url)
+            } else {
+                date = (try? current.node.url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+            }
             datedFiles.append((current.node.url, date))
             if let categoryURL = current.categoryURL {
                 categoryCounts[categoryURL, default: 0] += 1

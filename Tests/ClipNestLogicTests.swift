@@ -109,7 +109,7 @@ final class ClipNestLogicTests: XCTestCase {
     }
 
     @MainActor
-    func testVaultStoreReadsMarkdownContentFromNestedFolder() throws {
+    func testVaultStoreReadsMarkdownContentFromNestedFolder() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipNestNestedRead-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -127,7 +127,8 @@ final class ClipNestLogicTests: XCTestCase {
 
         store.openVault(at: root)
 
-        XCTAssertEqual(store.loadText(file), expected)
+        let loaded = try await store.loadText(file)
+        XCTAssertEqual(loaded, expected)
         XCTAssertEqual(
             store.rootNode?.children?.first(where: { $0.name == "开发" })?.children?.first?.url
                 .resolvingSymlinksInPath(),

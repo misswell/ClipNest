@@ -191,7 +191,8 @@ struct VSCodeLayout: View {
         panel.canCreateDirectories = true
         panel.prompt = "Open Vault"
         panel.message = "Choose a folder of Markdown files to open as a vault."
-        panel.directoryURL = store.rootURL
+        panel.directoryURL = store.openVaultStartingDirectory ?? store.rootURL
+        store.openVaultStartingDirectory = nil
         if panel.runModal() == .OK, let url = panel.url {
             store.openVault(at: url)
         }

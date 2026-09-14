@@ -15,6 +15,7 @@ struct EditorPane: View {
     @State private var loadedURL: URL?
     @State private var isEditorReady = false
     @State private var loadError: String?
+    @State private var isLoadingFromCloud = false
     @State private var reloadAttempt = 0
     @State private var loadRequestGate = DocumentLoadRequestGate()
 
@@ -38,6 +39,8 @@ struct EditorPane: View {
                 editorContent
             } else if loadError != nil {
                 loadFailureView
+            } else if isLoadingFromCloud {
+                ProgressView("Downloading from iCloud…")
             } else {
                 ProgressView("Reading document…")
             }
@@ -58,11 +61,20 @@ struct EditorPane: View {
             loadedTextSnapshot = ""
             text = ""
             loadError = nil
+            isLoadingFromCloud = false
             await Task.yield()
             guard loadRequestGate.accepts(loadRequest) else { return }
             let target = normalizedURL
-            let readTask = Task.detached(priority: .utility) {
-                Result { try VaultStore.readText(at: target) }
+            let readTask = Task.detached(priority: .utility) { () -> Result<String, Error> in
+                do {
+                    let loaded = try await VaultFileAccess.shared.readText(at: target) { phase in
+                        guard phase == .downloading else { return }
+                        Task { @MainActor in isLoadingFromCloud = true }
+                    }
+                    return .success(loaded)
+                } catch {
+                    return .failure(error)
+                }
             }
             // There is no system push transition on macOS, but one run-loop-sized grace period
             // keeps NSTextView construction out of the same event that changes the active tab.

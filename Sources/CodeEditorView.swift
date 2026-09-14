@@ -54,6 +54,7 @@ struct CodeEditorView: NSViewRepresentable {
             let sel = tv.selectedRange()
             tv.string = text
             tv.setSelectedRange(NSRange(location: min(sel.location, (text as NSString).length), length: 0))
+            context.coordinator.noteActiveLine(tv)
             context.coordinator.scheduleHighlight(after: 0.16)
         }
     }
@@ -72,6 +73,15 @@ struct CodeEditorView: NSViewRepresentable {
         private(set) var hydratingValue = ""
         private var hydrationGeneration: UInt64 = 0
         private(set) var isHydrating = false
+        /// The caret line the text storage is currently styled for. Moving the caret *within*
+        /// a line cannot change Live Preview styling, so it is skipped entirely.
+        private var highlightedActiveLine: NSRange?
+
+        /// Live Preview restyling is expensive: it walks every line and runs several regular
+        /// expressions over the whole document. Typing is coalesced so only a pause restyles,
+        /// and a caret move between lines restyles once shortly after the move settles.
+        private static let typingHighlightDelay: TimeInterval = 0.08
+        private static let selectionHighlightDelay: TimeInterval = 0.02
 
         init(_ parent: CodeEditorView) { self.parent = parent }
 
@@ -88,19 +98,29 @@ struct CodeEditorView: NSViewRepresentable {
             hydratingValue = value
             isHydrating = true
             textView.isEditable = false
-            textView.string = ""
             textView.layoutManager?.allowsNonContiguousLayout = true
 
+            // Small documents are assigned in one pass; large ones are streamed so the editor
+            // can appear before the whole source is laid out.
+            if value.utf8.count < Self.progressiveThreshold {
+                textView.string = value
+                finishHydration(in: textView, generation: generation, documentID: documentID)
+                return
+            }
+
+            textView.string = ""
             hydrationTask = Task { @MainActor [weak self, weak textView] in
                 guard let self, let textView else { return }
                 var index = value.startIndex
-                let chunkSize = 8_192
+                let chunkSize = Self.chunkSize
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: MarkdownStyler.body,
+                    .foregroundColor: self.fgColor,
+                    .paragraphStyle: MarkdownStyler.paragraph,
+                ]
 
                 while index < value.endIndex {
-                    guard !Task.isCancelled,
-                          self.hydrationGeneration == generation,
-                          self.documentID == documentID
-                    else { return }
+                    guard !Task.isCancelled, self.isCurrent(generation, documentID) else { return }
                     let end = value.index(
                         index,
                         offsetBy: chunkSize,
@@ -108,9 +128,7 @@ struct CodeEditorView: NSViewRepresentable {
                     let chunk = String(value[index..<end])
                     let storage = textView.textStorage
                     storage?.beginEditing()
-                    storage?.replaceCharacters(
-                        in: NSRange(location: storage?.length ?? 0, length: 0),
-                        with: chunk)
+                    storage?.append(NSAttributedString(string: chunk, attributes: attributes))
                     storage?.endEditing()
                     index = end
 
@@ -119,14 +137,27 @@ struct CodeEditorView: NSViewRepresentable {
                     }
                 }
 
-                guard !Task.isCancelled,
-                      self.hydrationGeneration == generation,
-                      self.documentID == documentID
-                else { return }
-                self.isHydrating = false
-                textView.isEditable = true
-                self.scheduleHighlight(after: 0.16)
+                guard !Task.isCancelled else { return }
+                self.finishHydration(in: textView, generation: generation, documentID: documentID)
             }
+        }
+
+        /// Documents below this size are assigned in one pass instead of streamed.
+        private static let progressiveThreshold = 256 * 1024
+        private static let chunkSize = 8_192
+
+        private func isCurrent(_ generation: UInt64, _ documentID: URL) -> Bool {
+            hydrationGeneration == generation && self.documentID == documentID
+        }
+
+        /// The single exit point for a hydration pass, so a superseded or cancelled pass can
+        /// never leave the text view permanently read-only.
+        private func finishHydration(in textView: NSTextView, generation: UInt64, documentID: URL) {
+            guard isCurrent(generation, documentID) else { return }
+            isHydrating = false
+            textView.isEditable = true
+            noteActiveLine(textView)
+            scheduleHighlight(after: 0.16)
         }
 
         private var fgColor: NSColor {
@@ -138,7 +169,17 @@ struct CodeEditorView: NSViewRepresentable {
             guard !isHydrating else { return }
             guard let tv = textView, let ts = tv.textStorage else { return }
             let active = (tv.string as NSString).lineRange(for: tv.selectedRange())
+            highlightedActiveLine = active
             MarkdownStyler.apply(to: ts, baseColor: fgColor, activeLine: active)
+        }
+
+        /// Current caret line, recorded before the debounced restyle runs.
+        private func activeLine(in tv: NSTextView) -> NSRange {
+            (tv.string as NSString).lineRange(for: tv.selectedRange())
+        }
+
+        func noteActiveLine(_ tv: NSTextView) {
+            highlightedActiveLine = activeLine(in: tv)
         }
 
         func scheduleHighlight(after delay: TimeInterval) {
@@ -154,13 +195,19 @@ struct CodeEditorView: NSViewRepresentable {
             guard !isHydrating else { return }
             guard let tv = textView else { return }
             parent.text = tv.string
-            highlight()
+            noteActiveLine(tv)
+            scheduleHighlight(after: Self.typingHighlightDelay)
             detectSlash(tv)
         }
 
         // Reveal/hide markers as the caret moves between lines (Obsidian Live Preview).
+        // A caret move inside the same line changes nothing, so it is ignored.
         func textViewDidChangeSelection(_ notification: Notification) {
-            highlight()
+            guard !isHydrating, let tv = textView else { return }
+            let active = activeLine(in: tv)
+            guard active != highlightedActiveLine else { return }
+            highlightedActiveLine = active
+            scheduleHighlight(after: Self.selectionHighlightDelay)
         }
 
         /// Obsidian-style list continuation: Return on a list/todo line starts the next item;

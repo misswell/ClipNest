@@ -1,8 +1,9 @@
 # ClipNest
 
-An **AI-powered Markdown inbox for iPhone, iPad, and Mac**. Copy useful material in any app, open
-ClipNest, and it becomes a structured, categorized note in a plain Markdown Vault. The underlying
-folder remains compatible with [Obsidian](https://obsidian.md), Files, Finder, and other editors.
+An **AI-powered Quick Paste inbox for iPhone, iPad, and Mac**. Copy useful material in any app,
+trigger ClipNest's Quick Paste, and it becomes a structured note in the right notebook. The
+underlying folder remains compatible with [Obsidian](https://obsidian.md), Files, Finder, and
+other editors, so you can continue working with the same content directly in Obsidian.
 On the Mac it presents a **VS Code-style workspace** — activity bar, explorer, editor, and
 **embedded terminals** — with a live Edit · Split · Preview editor and an extension marketplace.
 
@@ -22,9 +23,12 @@ On the Mac it presents a **VS Code-style workspace** — activity bar, explorer,
 
 - 📁 **Open any folder as a vault** — fully compatible with your existing **Obsidian** vault. Notes
   are plain `.md` files; nothing is locked into a proprietary store.
-- 📋 **Clipboard to note** — copy → open ClipNest → AI-generated title, summary, Markdown, tags,
-  classification, and automatic save with Inbox fallback. With auto-detection off, the home
-  screen's **Capture Clipboard** button captures the clipboard manually.
+- ⚡ **Quick Paste from the clipboard** — paste an article, URL, quote, thread, or snippet into
+  ClipNest without breaking your flow.
+- 🤖 **AI notebook classification** — ClipNest generates a title, summary, Markdown, tags, and
+  classification, then routes the note into the appropriate notebook/category with Inbox fallback.
+- 🧩 **Work directly with Obsidian content** — ClipNest reads and writes the same plain `.md` files
+  in your vault, so you can open the folder in Obsidian and keep editing without export or conversion.
 - 📷 **Photo to note** — on-device OCR (Vision, 中文 + English) turns the **latest library photo**
   or any photo you pick into the same organized note. No network needed for recognition.
 - 🌳 **File & folder management** — sidebar tree with create / rename / delete for notes and folders.
@@ -117,11 +121,15 @@ xcodebuild -scheme ClipNest -destination 'platform=iOS Simulator,name=iPhone 17'
 On first launch the app opens a bundled **Sample Vault** so you can explore immediately. Use
 **Open Folder…** to point it at your own (or Obsidian) vault.
 
+Quick Paste is the primary capture path: copy content in another app, open ClipNest, and let AI
+classify it into the right notebook before saving it as Markdown.
+
 ## Obsidian Compatibility
 
 ClipNest reads and writes the same plain files Obsidian does — point both apps at the same folder
-and they stay in sync on disk. Image embeds use Obsidian's `![[file]]` shorthand as well as
-standard Markdown, so notes render the same in either app.
+and they stay in sync on disk. Quick Paste and AI classification create notes in that same vault,
+so you can open the folder in Obsidian and operate on the content directly. Image embeds use
+Obsidian's `![[file]]` shorthand as well as standard Markdown, so notes render the same in either app.
 
 ## Developer
 

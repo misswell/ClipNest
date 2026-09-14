@@ -1,11 +1,9 @@
 import SwiftUI
 import PhotosUI
-import UniformTypeIdentifiers
 
 /// The main two-pane vault browser: file/folder tree on the left, editor/preview on the right.
 struct VaultView: View {
     @EnvironmentObject var store: VaultStore
-    @State private var showImporter = false
 
     // Name-entry dialogs
     @State private var showNewFile = false
@@ -32,11 +30,7 @@ struct VaultView: View {
                 _ = store.moveDocumentInOrder(url, direction: direction)
             }
         )
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.folder]) { result in
-            if case let .success(url) = result { store.openVault(at: url) }
-        }
         // Bridge macOS menu commands
-        .onChange(of: store.openVaultRequested) { _, v in if v { showImporter = true; store.openVaultRequested = false } }
         .onChange(of: store.newFileRequested) { _, v in if v { startNewFile(); store.newFileRequested = false } }
         // New file / folder dialogs
         .alert("New Markdown File", isPresented: $showNewFile) {
@@ -89,13 +83,15 @@ struct VaultView: View {
 private struct VaultNavigationHost: View {
     @EnvironmentObject private var store: VaultStore
     @EnvironmentObject private var captureCoordinator: CaptureCoordinator
-    @EnvironmentObject private var vaultTabTracker: VaultTabTracker
     #if os(iOS)
     @State private var sidebarPhotoPicker = false
     #endif
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var expandedFolders: Set<URL> = []
     @State private var navigationSelection: URL?
+    /// How the currently routed note should open. Every browse surface selects `.view`, so a
+    /// new note always starts in Preview regardless of what the previous note was doing.
+    @State private var requestedIntent: NoteOpenIntent = .view
 
     let onNewFile: (URL?) -> Void
     let onNewFolder: (URL?) -> Void
@@ -113,13 +109,6 @@ private struct VaultNavigationHost: View {
     #else
     private var pickPhotoAction: () -> Void { {} }
     #endif
-
-    /// A human cannot realistically switch tabs and tap a note row within the window;
-    /// a passthrough tap always does. The stamp comes from the tab switch itself, so it
-    /// can never be refreshed by anything happening inside this screen.
-    private var withinTabSwitchGrace: Bool {
-        Date().timeIntervalSince(vaultTabTracker.vaultTabActivatedAt) < 0.35
-    }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -159,14 +148,15 @@ private struct VaultNavigationHost: View {
 
             if navigationSelection == nil, store.rootURL != nil {
                 quickPasteButton
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 20)
+                    .padding(.trailing, AppMetrics.fabInset)
+                    .padding(.bottom, AppMetrics.fabInset)
             }
         }
         .background(
             VaultSelectionNavigationBridge(
                 selection: store.selection,
-                navigationSelection: $navigationSelection
+                navigationSelection: $navigationSelection,
+                requestedIntent: $requestedIntent
             )
         )
         .task {
@@ -187,7 +177,7 @@ private struct VaultNavigationHost: View {
             let node = FileNode(url: url, name: url.lastPathComponent,
                                 isDirectory: false, children: nil)
             if node.isEditable {
-                MarkdownEditorView(url: url)
+                MarkdownEditorView(url: url, intent: requestedIntent)
             } else if node.isImage {
                 ImageFileView(url: url)
             } else {
@@ -227,7 +217,8 @@ private struct VaultNavigationHost: View {
 
     private func selectFile(_ url: URL) {
         guard navigationSelection != url else { return }
-        guard !withinTabSwitchGrace else { return }
+        // Tapping a row in Explorer means "show me this note", so the detail opens in Preview.
+        requestedIntent = .view
         navigationSelection = url
         // Keep service code (capture/wiki actions) pointed at the same file without making the
         // navigation state wait for the global selection publisher.
@@ -301,9 +292,8 @@ private struct VaultSidebar: View, Equatable {
                 }
                 .listStyle(.sidebar)
                 #if os(iOS)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear.frame(height: 76)
-                }
+                // Consume taps that land on the floating tab bar instead of the row below it.
+                .bottomTabBarExclusion()
                 #endif
                 .toolbar { sidebarToolbar }
             }
@@ -344,6 +334,9 @@ private struct VaultSidebar: View, Equatable {
 
     @ToolbarContentBuilder
     private var sidebarToolbar: some ToolbarContent {
+        // No explicit icon frame here: UIKit already gives every navigation-bar button a
+        // ≥44pt hit target, and wrapping the label in another 44×44 frame only inflates the
+        // iOS 26 glass capsule, making the photo/add buttons easier to hit by accident.
         ToolbarItemGroup(placement: .primaryAction) {
             #if os(iOS)
             Button {
@@ -352,6 +345,7 @@ private struct VaultSidebar: View, Equatable {
                 Image(systemName: "photo.on.rectangle")
             }
             .help("Capture Photo")
+            .accessibilityLabel("Capture Photo")
             #endif
             Menu {
                 Button { onNewFile(nil) } label: {
@@ -370,6 +364,7 @@ private struct VaultSidebar: View, Equatable {
             } label: {
                 Image(systemName: "plus")
             }
+            .accessibilityLabel("Add")
         }
     }
 }
@@ -379,6 +374,7 @@ private struct VaultSidebar: View, Equatable {
 private struct VaultSelectionNavigationBridge: View {
     @ObservedObject var selection: VaultSelection
     @Binding var navigationSelection: URL?
+    @Binding var requestedIntent: NoteOpenIntent
 
     var body: some View {
         Color.clear
@@ -393,6 +389,8 @@ private struct VaultSelectionNavigationBridge: View {
 
     private func sync() {
         guard navigationSelection != selection.fileURL else { return }
+        // A service-opened document is still a "show me this note" action.
+        requestedIntent = .view
         navigationSelection = selection.fileURL
     }
 }
@@ -505,17 +503,18 @@ private struct VaultTreeNode: View {
     }
 }
 
-/// Simple full-bleed viewer for image attachments selected in the tree.
+/// Simple full-bleed viewer for image attachments selected in the tree. Reads through the
+/// shared vault access layer (so iCloud placeholders download) and the image cache.
 struct ImageFileView: View {
     let url: URL
-    @State private var image: Image?
+    @State private var image: PlatformImage?
     @State private var didFinishLoading = false
     @State private var loadRequestGate = DocumentLoadRequestGate()
 
     var body: some View {
         Group {
             if let image {
-                image.resizable().scaledToFit().padding()
+                Image(platformImage: image).resizable().scaledToFit().padding()
             } else if didFinishLoading {
                 ContentUnavailableView("Cannot Preview Image", systemImage: "photo")
             } else {
@@ -532,13 +531,11 @@ struct ImageFileView: View {
             let loadRequest = loadRequestGate.begin(for: url)
             didFinishLoading = false
             image = nil
-            let data = await Task.detached(priority: .utility) {
-                try? Data(contentsOf: url)
-            }.value
+            let loaded = await VaultImageLoader.image(
+                for: url,
+                maxPixelSize: VaultImageLoader.fullSizeMaxPixelSize)
             guard loadRequestGate.accepts(loadRequest) else { return }
-            if let data, let decoded = Image(platformData: data) {
-                image = decoded
-            }
+            image = loaded
             didFinishLoading = true
         }
     }

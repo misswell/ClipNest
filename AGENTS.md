@@ -81,6 +81,14 @@ extension): immutable `raw/`, LLM-owned `wiki/`, wikilinks, append-only `wiki/lo
   (Explorer/Search/Extensions + iCloud account + Settings) · side bar · `EditorPane` · `TerminalPanel`.
   Side bar and terminal widths are drag-resizable; both are collapsible.
 - `VaultStore` owns the open folder (security-scoped/plain bookmark), the file tree, and CRUD.
+- **`Sources/Storage/` is the only place that touches vault bytes.** `VaultFileAccess` (an actor)
+  reads/writes every note and attachment through `NSFileCoordinator` and materialises iCloud
+  placeholders with cancellable async waits; `VaultMetadataCache` + `VaultWriteEventFilter` keep
+  large-vault refreshes cheap; `VaultImageLoader` caches and downsamples attachments. New code
+  must read/write via `VaultFileAccess`, never `Data(contentsOf:)`.
+- `Sources/DesignSystem.swift` holds `AppMetrics` (screen gutters, card radius, control hit size)
+  and the shared `BottomInteractionExclusionZone` / toolbar-icon components. Use those tokens
+  instead of ad-hoc paddings and frames.
 - `EditorPane` + `CodeEditorView` (NSTextView with the slash menu) + `MarkdownPreview` (renderer).
 - `TerminalController`/`TerminalSession`/`TerminalPanel` — tabbed embedded terminals (SwiftTerm).
 - `ExtensionRegistry` + `ExtensionsSidebar` + `ExtensionPanels` (Wiki, GitHub) + `WikiService`.
@@ -90,3 +98,34 @@ extension): immutable `raw/`, LLM-owned `wiki/`, wikilinks, append-only `wiki/lo
 - Use the brand palette in `Theme.swift` (`Theme.*`) and the VS Code chrome tokens (`VSCode.*`);
   avoid raw color literals.
 - Keep iOS working: macOS-only files/sections are wrapped in `#if os(macOS)`.
+
+## Releasing (macOS / desktop)
+
+`MARKETING_VERSION` in `project.yml` is the single source of truth for the release version —
+`ClipNest.xcodeproj` is gitignored and `Info.plist` is generated, so there is no other copy to
+update. Bump it, commit, then push a matching tag:
+
+```sh
+# e.g. MARKETING_VERSION: "1.0"  ->  tag v1.0
+git tag v1.0 && git push origin v1.0
+```
+
+`.github/workflows/release.yml` then test-builds, signs with Developer ID, notarizes, staples, and
+publishes a GitHub Release with `ClipNest-<version>-macos.zip` (universal `arm64` + `x86_64`).
+`workflow_dispatch` runs the same job off the version in `project.yml`.
+
+Locally: `Scripts/distribute-app.sh` does build → sign → notarize → staple → zip. Notarization
+credentials come from `CLIPNEST_NOTARY_APPLE_ID`/`CLIPNEST_NOTARY_PASSWORD` (CI secrets) or
+`CLIPNEST_NOTARY_PROFILE` (a local `notarytool` keychain profile). For a quick unsigned smoke test:
+`CLIPNEST_SIGN_IDENTITY="-" CLIPNEST_SKIP_NOTARIZE=1 Scripts/distribute-app.sh`.
+
+Signing for the *desktop* build ignores the App Store setup in `project.yml`: the script overrides
+`DEVELOPMENT_TEAM` to the local team and signs manually with Developer ID, so the checked-in spec
+stays as upstream wants it. It also has to set `CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO` — otherwise
+Xcode injects `com.apple.security.get-task-allow`, which the notary service rejects.
+
+For a device (iPhone/iPad) build: `Scripts/deploy-ios.sh`.
+
+CI needs six repository secrets (the same names the other Octo repos use): `APPLE_CERTIFICATE_P12`,
+`APPLE_CERTIFICATE_PASSWORD`, `APPLE_DEVELOPER_ID`, `APPLE_TEAM_ID`, `APPLE_ID`,
+`APPLE_APP_SPECIFIC_PASSWORD`.

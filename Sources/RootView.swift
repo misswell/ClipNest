@@ -1,16 +1,10 @@
 import SwiftUI
 
-/// Timestamps the moment the Vault tab becomes visible, so the file list can ignore
-/// the tab-switch tap that "passes through" onto a note row underneath the tab bar.
-@MainActor
-final class VaultTabTracker: ObservableObject {
-    @Published var vaultTabActivatedAt = Date.distantPast
-}
-
 struct RootView: View {
     @EnvironmentObject private var captureCoordinator: CaptureCoordinator
-    @StateObject private var vaultTabTracker = VaultTabTracker()
+    @EnvironmentObject private var store: VaultStore
     @State private var appTab = 0
+    @State private var showVaultImporter = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -76,10 +70,17 @@ struct RootView: View {
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
                 .tag(2)
         }
-        .onChange(of: appTab) { _, newValue in
-            if newValue == 0 { vaultTabTracker.vaultTabActivatedAt = Date() }
+        // Owned here rather than in VaultView: any tab can ask for the folder picker
+        // (the sidebar, or the settings "Open Another Folder…" row), and a request must not
+        // depend on the Vault tab already having been built.
+        .fileImporter(isPresented: $showVaultImporter, allowedContentTypes: [.folder]) { result in
+            if case let .success(url) = result { store.openVault(at: url) }
         }
-        .environmentObject(vaultTabTracker)
+        .onChange(of: store.openVaultRequested) { _, requested in
+            guard requested else { return }
+            store.openVaultRequested = false
+            showVaultImporter = true
+        }
         #endif
     }
 }

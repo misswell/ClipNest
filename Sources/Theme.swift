@@ -62,20 +62,26 @@ extension Color {
 }
 
 /// Reusable elevated card surface — white/elevated, continuous corners, hairline border.
+/// Sizes come from `AppMetrics` so every card in the app shares one radius and inset.
 struct AppCard: ViewModifier {
-    var padding: CGFloat = 16
+    var padding: CGFloat = AppMetrics.cardPadding
+    var radius: CGFloat = AppMetrics.cardRadius
+
     func body(content: Content) -> some View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(Theme.hairline)
             )
     }
 }
 
 extension View {
-    func appCard(padding: CGFloat = 16) -> some View { modifier(AppCard(padding: padding)) }
+    func appCard(padding: CGFloat = AppMetrics.cardPadding,
+                 radius: CGFloat = AppMetrics.cardRadius) -> some View {
+        modifier(AppCard(padding: padding, radius: radius))
+    }
 }
