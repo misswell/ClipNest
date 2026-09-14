@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: clipnest-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: Test and build (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcode_app="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)"
+          [[ -n "$xcode_app" && -d "$xcode_app" ]] || {
+            echo "No Xcode installation was found on the runner." >&2
+            exit 1
+          }
+          sudo xcode-select --switch "$xcode_app"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Generate project
+        run: xcodegen generate
+
+      # Ad-hoc signing: CI has no developer certificate, and the project pins the
+      # upstream team. Nothing here is distributed, so no identity is needed.
+      - name: Run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild test -project ClipNest.xcodeproj -scheme ClipNest \
+            -destination 'platform=macOS' -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/dd-macos" \
+            -skipPackagePluginValidation \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" \
+            DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
+
+      - name: Build desktop app
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild build -project ClipNest.xcodeproj -scheme ClipNest \
+            -destination 'platform=macOS' -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/dd-release" \
+            -skipPackagePluginValidation \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" \
+            DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
+
+  ios:
+    name: Compile (iOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo xcode-select --switch "$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      # Compile check only. Ad-hoc signing keeps the iOS target honest — no
+      # CODE_SIGNING_ALLOWED=NO, which would mask real device signing problems.
+      - name: Build for the iOS simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild build -project ClipNest.xcodeproj -scheme ClipNest \
+            -destination 'generic/platform=iOS Simulator' -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/dd-ios" \
+            -skipPackagePluginValidation \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" \
+            DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
