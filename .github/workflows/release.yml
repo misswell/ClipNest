@@ -91,6 +91,9 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Preparing ClipNest $version ($tag)"
 
+      # Ad-hoc signed on purpose: the Developer ID certificate has not been imported
+      # yet at this point, and this build is thrown away — only the release artifact
+      # below needs a real identity.
       - name: Run tests
         shell: bash
         run: |
@@ -100,7 +103,8 @@ jobs:
             -destination 'platform=macOS' -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/clipnest-tests" \
             -skipPackagePluginValidation \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" \
+            DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
 
       - name: Import Developer ID certificate
         shell: bash
