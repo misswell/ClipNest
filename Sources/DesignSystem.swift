@@ -33,7 +33,11 @@ enum AppMetrics {
     /// Height of the bottom strip reserved for the iOS 26 floating tab bar. Content that
     /// scrolls under the tab bar must not receive taps there; see
     /// `BottomInteractionExclusionZone`.
-    static let tabBarProtectionHeight: CGFloat = 80
+    ///
+    /// The floating bar's band measures ~82pt on an iPhone 17 Pro (capsule top → screen
+    /// bottom). The headroom keeps the strip above the capsule's rounded top edge, which is
+    /// where a stray tap most easily slips past it.
+    static let tabBarProtectionHeight: CGFloat = 96
 
     static let contentMaxWidth: CGFloat = 720
 
@@ -53,7 +57,17 @@ enum AppMetrics {
 /// "Vault" while already on Vault used to open a note. This view sits in that strip as a
 /// transparent, always-hit-testable shape so the touch is consumed before it reaches a row.
 ///
-/// It consumes taps only: a scroll gesture that starts here still scrolls the content.
+/// It consumes taps and long presses: a scroll gesture that starts here still scrolls, because a
+/// long press is cancelled as soon as the finger moves.
+///
+/// The strip has to sit on the **bottom edge of the screen**, not on the bottom of the safe
+/// area. `safeAreaInset(edge: .bottom)` — and a plain bottom-aligned `overlay` — place it
+/// *above* the floating bar: the device reserves ~74pt for the bar, so the strip ended up
+/// covering the last visible row and the quick-paste button while the band the bar actually
+/// floats in, plus the rows showing through it, stayed tappable. A `GeometryReader` is the
+/// only reliable anchor here: its frame bottom plus its own bottom safe-area inset always
+/// equals the screen bottom, so pinning to the frame and offsetting by the inset lands the
+/// strip on the real edge whether or not the container already accounts for the bar.
 struct BottomInteractionExclusionZone: View {
     var height: CGFloat = AppMetrics.tabBarProtectionHeight
 
@@ -61,14 +75,21 @@ struct BottomInteractionExclusionZone: View {
         // iPadOS draws the tab bar at the top, so protecting the bottom strip there would only
         // add dead scroll space. Only iPhone-style layouts need it.
         if Self.tabBarSitsAtBottom {
-            Color.clear
-                .frame(maxWidth: .infinity)
-                .frame(height: height)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    // Deliberately consume the tap so it cannot reach a row underneath.
-                }
-                .accessibilityHidden(true)
+            GeometryReader { proxy in
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        // Deliberately consume the tap so it cannot reach a row underneath.
+                    }
+                    .onLongPressGesture(minimumDuration: 0.35) {
+                        // A long press would otherwise open the hidden row's context menu.
+                    }
+                    .accessibilityHidden(true)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .offset(y: proxy.safeAreaInsets.bottom)
+            }
         }
     }
 
@@ -82,9 +103,10 @@ struct BottomInteractionExclusionZone: View {
 }
 
 extension View {
-    /// Reserves the tab-bar strip at the bottom of a scroll surface and blocks touches there.
+    /// Blocks touches in the strip the floating tab bar sits in. The zone anchors itself to the
+    /// screen edge, so no alignment or safe-area handling is needed at the call site.
     func bottomTabBarExclusion() -> some View {
-        safeAreaInset(edge: .bottom, spacing: 0) {
+        overlay {
             BottomInteractionExclusionZone()
         }
     }
