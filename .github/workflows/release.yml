@@ -152,13 +152,14 @@ jobs:
           echo "--- identities visible through the search list ---"
           security find-identity -v -p codesigning
 
-          # A keychain is only unlocked for the session that unlocked it, so the state
-          # set up here does not survive into the step that actually signs. Hand the
-          # details over so that step can unlock again for itself.
-          {
-            echo "CLIPNEST_KEYCHAIN_PATH=$keychain_path"
-            echo "CLIPNEST_KEYCHAIN_PASSWORD=$keychain_password"
-          } >> "$GITHUB_ENV"
+          # The signing step has to unlock for itself, because a keychain is only
+          # unlocked for the session that unlocked it. The path travels through the
+          # environment, but the password goes into a private file: anything exported
+          # through $GITHUB_ENV is echoed back in the next step's environment dump,
+          # which would print the password into the public build log.
+          echo "CLIPNEST_KEYCHAIN_PATH=$keychain_path" >> "$GITHUB_ENV"
+          printf '%s' "$keychain_password" > "$RUNNER_TEMP/clipnest-keychain-password"
+          chmod 600 "$RUNNER_TEMP/clipnest-keychain-password"
 
       - name: Build, sign, notarize, staple, and verify
         shell: bash
@@ -172,7 +173,7 @@ jobs:
           # across steps, and codesign reports a locked keychain as "The specified item
           # could not be found in the keychain", which reads like a missing certificate.
           keychain_path="$CLIPNEST_KEYCHAIN_PATH"
-          keychain_password="$CLIPNEST_KEYCHAIN_PASSWORD"
+          keychain_password="$(cat "$RUNNER_TEMP/clipnest-keychain-password")"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
           existing="$(security list-keychains -d user | sed 's/^[[:space:]]*//; s/"//g')"
@@ -239,3 +240,4 @@ jobs:
           if [[ -n "${CLIPNEST_KEYCHAIN_PATH:-}" ]]; then
             security delete-keychain "$CLIPNEST_KEYCHAIN_PATH" >/dev/null 2>&1 || true
           fi
+          rm -f "$RUNNER_TEMP/clipnest-keychain-password"
