@@ -49,22 +49,53 @@ command -v xcodegen >/dev/null || { echo "xcodegen is not installed" >&2; exit 1
 echo "==> Generating ClipNest.xcodeproj"
 xcodegen generate
 
-echo "==> Building ClipNest $VERSION ($ARCHS_WANTED)"
-# project.yml pins the upstream team (GU9WTSTX9M) and a manual App Store profile for
-# the iphoneos SDK, so both are overridden here rather than edited in the spec.
-# CODE_SIGN_INJECT_BASE_ENTITLEMENTS must also be off: otherwise the app carries
-# com.apple.security.get-task-allow, which the notary service rejects.
+echo "==> Building ClipNest $VERSION ($ARCHS_WANTED), unsigned"
+# Compile with signing switched off, then apply the signature below by hand.
+#
+# Letting xcodebuild resolve the identity looks simpler, but on the CI runner it fails
+# before compiling anything, for every target including the SwiftPM package ones, with
+# "No certificate for team ... matching ... found" — even though the certificate was
+# present, unexpired, and visible through the keychain search list. The resolver is also
+# being asked to pick a distribution certificate for package targets that have no reason
+# to carry one. Signing here instead sidesteps both, and the seal becomes inspectable.
+#
+# project.yml still pins the upstream team (GU9WTSTX9M) and the App Store profile for the
+# iphoneos SDK; neither applies to a Release macOS build that is not signed by Xcode.
+# This disables signing for this one build only — simulator and device builds keep the
+# automatic signing configured in project.yml.
 xcodebuild -project ClipNest.xcodeproj -scheme ClipNest \
     -configuration Release -destination 'platform=macOS' \
     -derivedDataPath "$DERIVED" -skipPackagePluginValidation -skipMacroValidation \
     ARCHS="$ARCHS_WANTED" ONLY_ACTIVE_ARCH=NO \
-    DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual \
-    CODE_SIGN_IDENTITY="$SIGN_IDENTITY" PROVISIONING_PROFILE_SPECIFIER= \
+    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY="" CODE_SIGN_ENTITLEMENTS="" \
+    DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER= \
     CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
-    ENABLE_HARDENED_RUNTIME=YES OTHER_CODE_SIGN_FLAGS="--timestamp" \
     build
 
 [[ -d "$APP" ]] || { echo "Missing built app at $APP" >&2; exit 1; }
+
+echo "==> Signing with $SIGN_IDENTITY"
+ENTITLEMENTS="$ROOT/Sources/MarkdownVault.entitlements"
+[[ -f "$ENTITLEMENTS" ]] || { echo "Missing entitlements at $ENTITLEMENTS" >&2; exit 1; }
+
+# Inside out: embedded code must be sealed before the bundle that contains it, otherwise
+# the outer signature is computed over unsigned nested binaries. Today the main executable
+# is the only Mach-O in the bundle, so this loop is a no-op, but a future dependency can
+# add an embedded framework or dylib and this keeps the seal correct when it does.
+while IFS= read -r -d '' nested; do
+    codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$nested"
+done < <(find "$APP/Contents" -depth \
+    \( -name "*.dylib" -o -name "*.so" -o -name "*.framework" -o -name "*.xpc" -o -name "*.app" \) \
+    -print0 2>/dev/null)
+
+# Hardened runtime plus the app's own entitlements. get-task-allow must not be present or
+# the notary service rejects the upload, which is why base entitlements stay uninjected.
+codesign --force --timestamp --options runtime \
+    --entitlements "$ENTITLEMENTS" \
+    --sign "$SIGN_IDENTITY" "$APP"
+
+codesign --verify --deep --strict "$APP"
 
 echo "==> Zipping for notarization"
 rm -f "$ZIP"
