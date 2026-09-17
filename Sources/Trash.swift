@@ -133,7 +133,7 @@ enum VaultTrash {
 
     /// Drops trashed items older than the cutoff (30-day retention policy).
     static func purgeOlderThan(_ cutoff: Date, in root: URL) {
-        var entries = loadManifest(in: root)
+        let entries = loadManifest(in: root)
         let survivors = entries.filter { entry in
             if entry.deletedAt >= cutoff { return true }
             try? FileManager.default.removeItem(at: directoryURL(in: root).appendingPathComponent(entry.id))

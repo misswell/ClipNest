@@ -12,6 +12,14 @@ struct FileNode: Identifiable, Hashable, Sendable {
     static let editableExtensions: Set<String> = ["md", "markdown", "mdown", "txt", "text", "csv"]
     static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff", "svg"]
 
+    /// Directories the local search index never descends into: tooling metadata, caches,
+    /// dependency trees and the app's own trash. Without this the index would try to embed
+    /// `node_modules` and `.git` internals on every pass.
+    static let indexingExcludedDirectories: Set<String> = [
+        ".obsidian", ".git", ".svn", ".hg", ".trash", ".clipnest", "node_modules",
+        ".build", "build", "dist", "DerivedData", ".venv", "venv", "__pycache__"
+    ]
+
     var ext: String { url.pathExtension.lowercased() }
     var isMarkdown: Bool { Self.markdownExtensions.contains(ext) }
     var isEditable: Bool { Self.editableExtensions.contains(ext) }

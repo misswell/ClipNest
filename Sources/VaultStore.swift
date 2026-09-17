@@ -484,6 +484,11 @@ final class VaultStore: ObservableObject {
         } else {
             metadataCache.invalidate(paths: paths)
         }
+        // The local search index keeps itself current from these paths instead of walking
+        // the whole vault again (spec §22).
+        NotificationCenter.default.post(name: .vaultFilesDidChange,
+                                        object: nil,
+                                        userInfo: ["paths": paths])
         scheduleAutoRefresh()
     }
 

@@ -48,7 +48,10 @@ struct EditorPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(VSCode.editorBg)
         .task(id: LoadKey(url: url, attempt: reloadAttempt)) {
-            let loadRequest = loadRequestGate.begin(for: url)
+            // A cancelled `.task` still runs its body, so it must never be allowed to claim the load.
+            guard let loadRequest = loadRequestGate.begin(for: url, isCancelled: Task.isCancelled) else {
+                return
+            }
             // The host view is reused across tabs; flush the previous document's pending edit
             // to its own file — never to the newly selected one.
             if let previous = loadedURL, previous != normalizedURL, text != loadedTextSnapshot {

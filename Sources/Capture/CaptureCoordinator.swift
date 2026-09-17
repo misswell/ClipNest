@@ -1,12 +1,12 @@
 import Foundation
-#if canImport(UIKit)
-import UIKit
-#endif
 
 @MainActor
 final class CaptureCoordinator: ObservableObject {
     @Published private(set) var state: CaptureState = .idle
     @Published private(set) var statusMessage = ""
+    /// Live detail for the status banner while a capture is being organized. `nil` whenever
+    /// nothing is running, so the banner can fall back to its plain spinner.
+    @Published private(set) var generationProgress: NoteGenerationProgress?
     @Published private(set) var showsStatusBanner = false
     @Published var pendingDraft: GeneratedNoteDraft?
     @Published var errorMessage: String?
@@ -15,31 +15,42 @@ final class CaptureCoordinator: ObservableObject {
     private let store: VaultStore
     private let clipboardService: ClipboardProviding
     private let noteGenerator: NoteGenerating?
-    private let defaults = UserDefaults.standard
+    private let ocrService: OCRRecognizing
+    private let defaults: UserDefaults
+    /// What "warming the model" actually does. Injected so the coordinator can be tested without
+    /// the weights or the on-device runtime, and so §17 keeps holding: this layer knows only that
+    /// *something* should be warmed, never what that something is. The comment deliberately avoids
+    /// naming either the runtime or the model, so a mechanical search for those names across this
+    /// whole directory still comes back empty and the layering stays auditable by grep.
+    private let preloadLocalModel: @MainActor () -> Void
 
     private var didStart = false
     private var isRunning = false
     private var lastSnapshot: ClipboardSnapshot?
     private var bannerTask: Task<Void, Never>?
 
-    init(store: VaultStore) {
-        self.store = store
-        self.clipboardService = ClipboardService()
-        self.noteGenerator = nil
+    convenience init(store: VaultStore) {
+        self.init(store: store, clipboardService: ClipboardService(), noteGenerator: nil)
     }
 
-    init(store: VaultStore, clipboardService: ClipboardProviding) {
-        self.store = store
-        self.clipboardService = clipboardService
-        self.noteGenerator = nil
+    convenience init(store: VaultStore, clipboardService: ClipboardProviding) {
+        self.init(store: store, clipboardService: clipboardService, noteGenerator: nil)
     }
 
     init(store: VaultStore,
          clipboardService: ClipboardProviding,
-         noteGenerator: NoteGenerating) {
+         noteGenerator: NoteGenerating?,
+         ocrService: OCRRecognizing = VisionOCRService(),
+         defaults: UserDefaults = .standard,
+         preloadLocalModel: @escaping @MainActor () -> Void = {
+             LocalModelManager.shared.preloadIfReady()
+         }) {
         self.store = store
         self.clipboardService = clipboardService
         self.noteGenerator = noteGenerator
+        self.ocrService = ocrService
+        self.defaults = defaults
+        self.preloadLocalModel = preloadLocalModel
     }
 
     deinit {
@@ -285,20 +296,97 @@ final class CaptureCoordinator: ObservableObject {
         state = .analyzing
         statusMessage = String(localized: "Analyzing content…")
         let categories = store.topLevelCategories()
-        let configuration = AIConfigurationStore.load()
+        let configuration = GenerationConfiguration.load()
         state = .generating
-        statusMessage = String(localized: "Generating note…")
-        if let noteGenerator {
-            return try await noteGenerator.generate(
-                from: snapshot.content,
-                existingCategories: categories,
-                preferredLanguage: configuration.preferredLanguage
-            )
+        statusMessage = generationStatusMessage(for: configuration.mode)
+        generationProgress = nil
+
+        let generator: any NoteGenerating = noteGenerator
+            // The coordinator does not know whether this ends up in the downloaded local
+            // model, Local Lite or the OpenAI-compatible provider — the router decides.
+            ?? NoteGenerationRouter(configuration: configuration,
+                                    categoryProfiles: store.categoryProfiles())
+
+        defer { generationProgress = nil }
+        return try await generate(using: generator,
+                                  from: snapshot.content,
+                                  existingCategories: categories,
+                                  preferredLanguage: configuration.text.preferredLanguage)
+    }
+
+    /// Runs the generator, forwarding progress to the banner when it can report any.
+    ///
+    /// The progress callback arrives on a background context, so it is hopped to the main actor
+    /// before touching published state.
+    private func generate(using generator: any NoteGenerating,
+                          from content: ClipboardContent,
+                          existingCategories: [String],
+                          preferredLanguage: PreferredLanguage) async throws -> GeneratedNote {
+        guard let reporting = generator as? ProgressReportingNoteGenerating else {
+            return try await generator.generate(from: content,
+                                                existingCategories: existingCategories,
+                                                preferredLanguage: preferredLanguage)
         }
-        return try await NoteGenerationService(configuration: configuration)
-            .generate(from: snapshot.content,
-                      existingCategories: categories,
-                      preferredLanguage: configuration.preferredLanguage)
+        return try await reporting.generate(
+            from: content,
+            existingCategories: existingCategories,
+            preferredLanguage: preferredLanguage,
+            onProgress: { [weak self] progress in
+                Task { @MainActor [weak self] in self?.applyGenerationProgress(progress) }
+            }
+        )
+    }
+
+    /// Warms the on-device model so the next capture does not pay the load.
+    ///
+    /// Called when the app becomes active and when a capture is requested, never on a cold
+    /// launch with no signal from the user. Gated by a setting because it keeps ~350 MB
+    /// resident for as long as the app is in the foreground (§26); the existing unload-on-
+    /// pressure and unload-on-background behaviour is what bounds that.
+    func preloadLocalModelIfEnabled() {
+        preloadLocalModelIfEnabled(mode: GenerationConfiguration.load().mode)
+    }
+
+    /// - Parameter mode: injected rather than read from `GenerationConfiguration`, so the rule can
+    ///   be exercised without writing to global user defaults (which would leak between tests).
+    func preloadLocalModelIfEnabled(mode: AIProcessingMode) {
+        // Never warm anything for an online configuration: there is no local model to warm, and
+        // touching one would be a step towards the network in a mode that must not need it (§11).
+        guard mode == .local else { return }
+        guard defaults.object(forKey: ClipNestSettings.localModelPreload) as? Bool ?? true else {
+            return
+        }
+        preloadLocalModel()
+    }
+
+    /// Maps one generation phase onto what the banner shows.
+    ///
+    /// Internal rather than private so the phase → message mapping can be asserted directly: it
+    /// is the whole of what the user sees while a note is being organized, and a wrong string here
+    /// is the "stuck spinner" complaint in a different costume.
+    func applyGenerationProgress(_ progress: NoteGenerationProgress) {
+        generationProgress = progress
+        switch progress {
+        case .preparingEngine:
+            statusMessage = String(localized: "Preparing the on-device model…")
+        case .generating(let preview):
+            statusMessage = preview.isEmpty
+                ? generationStatusMessage(for: .local)
+                : String(localized: "Writing the note…")
+        case .finishing:
+            statusMessage = String(localized: "Saving note…")
+        }
+    }
+
+    private func generationStatusMessage(for mode: AIProcessingMode) -> String {
+        switch mode {
+        case .local:
+            return LocalModelManager.shared.state.isReady
+                ? String(localized: "Generating note on device…")
+                : String(localized: "Organizing on device…")
+        case .online:
+            return String(localized: "Generating note…")
+        }
     }
 
     private func classifyAndSave(_ generated: GeneratedNote, snapshot: ClipboardSnapshot) async throws {
@@ -364,10 +452,9 @@ final class CaptureCoordinator: ObservableObject {
         await generateAndSave(snapshot)
     }
 
-#if os(iOS)
-    /// Records a photo picked through the zero-permission system picker (PHPicker):
-    /// recognize its text and organize it into a note.
-    func capturePhoto(_ image: UIImage) async {
+    /// Records a photo: recognize its text on device and organize it into a note.
+    /// Cross-platform — the Mac path uses the same Vision code as the phone.
+    func capturePhoto(_ image: PlatformImage) async {
         guard !isRunning else { return }
         bannerTask?.cancel()
         isRunning = true
@@ -376,22 +463,21 @@ final class CaptureCoordinator: ObservableObject {
         await finishPhotoCapture(image)
     }
 
-    private func finishPhotoCapture(_ image: UIImage) async {
+    private func finishPhotoCapture(_ image: PlatformImage) async {
         state = .analyzing
         statusMessage = String(localized: "Recognizing text in photo…")
-        let ocrText = (try? await Task.detached(priority: .utility) {
-            try PhotoCaptureService.recognizeText(in: image)
-        }.value) ?? ""
+        let ocrResult = await recognizeText(in: image)
+        let ocrText = OCRPostProcessor.process(ocrResult.text)
 
-        // When a separate image model is configured, send the photo to it directly
-        // (vision). Otherwise the OCR text flows into the text model pipeline.
-        let imageConfig = AIConfigurationStore.loadImageConfiguration()
-        if imageConfig.usesSeparateEndpoint {
-            let imageAI = AIConfiguration(baseURL: imageConfig.baseURL,
-                                          apiKey: imageConfig.apiKey,
-                                          model: imageConfig.model,
-                                          preferredLanguage: AIConfigurationStore.load().preferredLanguage)
-            if imageAI.isValid, let jpegData = image.jpegData(compressionQuality: 0.6) {
+        // A separate image model is only ever considered when the mode allows a network
+        // request at all. In local mode the photo is read by Vision and nothing else.
+        let configuration = GenerationConfiguration.load()
+        if shouldUseImageModel(configuration) {
+            let imageAI = AIConfiguration(baseURL: configuration.image.baseURL,
+                                          apiKey: configuration.image.apiKey,
+                                          model: configuration.image.model,
+                                          preferredLanguage: configuration.text.preferredLanguage)
+            if imageAI.isValid, let jpegData = image.jpegDataForUpload(compressionQuality: 0.6) {
                 state = .generating
                 statusMessage = String(localized: "Reading photo with image model…")
                 do {
@@ -400,7 +486,7 @@ final class CaptureCoordinator: ObservableObject {
                         imageData: jpegData,
                         ocrText: ocrText,
                         existingCategories: store.topLevelCategories(),
-                        preferredLanguage: AIConfigurationStore.load().preferredLanguage)
+                        preferredLanguage: configuration.text.preferredLanguage)
                     let anchorText = ocrText.isEmpty ? String(localized: "(photo)") : ocrText
                     guard let anchorContent = ClipboardContent(text: anchorText) else {
                         isRunning = false
@@ -436,7 +522,29 @@ final class CaptureCoordinator: ObservableObject {
         lastSnapshot = snapshot
         await generateAndSave(snapshot)
     }
-#endif
+
+    /// Vision OCR only. Failures are reported as an empty result rather than thrown, because
+    /// "no text in this photo" is a normal outcome, not an error.
+    private func recognizeText(in image: PlatformImage) async -> OCRResult {
+        guard let cgImage = image.ocrCGImage else { return .empty }
+        do {
+            return try await ocrService.recognizeText(cgImage: cgImage, languages: [])
+        } catch {
+            return .empty
+        }
+    }
+
+    /// Whether the vision endpoint may be used for this capture. Local mode is a hard no:
+    /// the photo is recognized with on-device Vision OCR and nothing else (China plan §9).
+    private func shouldUseImageModel(_ configuration: GenerationConfiguration) -> Bool {
+        guard configuration.image.usesSeparateEndpoint else { return false }
+        switch configuration.mode {
+        case .local:
+            return false
+        case .online:
+            return true
+        }
+    }
 
     private func record(_ snapshot: ClipboardSnapshot) {
         defaults.set(snapshot.hash, forKey: ClipNestSettings.lastSeenClipboardHash)

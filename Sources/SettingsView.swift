@@ -11,6 +11,19 @@ struct SettingsView: View {
     @AppStorage(ClipNestSettings.autoGenerateNote) private var autoGenerateNote = true
     @AppStorage(ClipNestSettings.processingMode) private var processingMode = ClipboardProcessingMode.automatic.rawValue
 
+    /// How notes are organized. Default is local: a fresh install is private and works with
+    /// no API key, no account and no network (China plan §8).
+    @AppStorage(ClipNestSettings.aiProcessingMode) private var aiProcessingMode = AIProcessingMode.recommended.rawValue
+    @AppStorage(ClipNestSettings.localSemanticSearch) private var localSemanticSearch = true
+    @AppStorage(ClipNestSettings.localQueryExpansion) private var localQueryExpansion = true
+    /// The CDN serving `model-manifest.json` (China plan §4).
+    @AppStorage(ClipNestSettings.localModelManifestURL) private var modelManifestURL = ""
+    @AppStorage(ClipNestSettings.localModelPreload) private var localModelPreload = true
+    @AppStorage(ClipNestSettings.localBodyStyle) private var localBodyStyle = LocalBodyStyle.default.rawValue
+    @EnvironmentObject private var search: LocalSearchController
+    @StateObject private var modelManager = LocalModelManager.shared
+    @State private var capabilities: LocalAICapabilities?
+
     @State private var aiBaseURL: String
     @State private var aiModel: String
     @State private var preferredLanguage: String
@@ -189,86 +202,126 @@ struct SettingsView: View {
                     .padding(.vertical, AppMetrics.rowVertical)
                 }
 
-                sectionCard("AI") {
-                    TextField("Base URL", text: $aiBaseURL)
-                        .textFieldStyle(.plain)
-                        .textContentType(.URL)
-                        .autocorrectionDisabled()
-                        .padding(.vertical, AppMetrics.rowVertical)
-                    rowDivider
-                    TextField("Model", text: $aiModel)
-                        .textFieldStyle(.plain)
-                        .autocorrectionDisabled()
-                        .padding(.vertical, AppMetrics.rowVertical)
-                    rowDivider
-                    SecureField("API Key (stored in Keychain)", text: $apiKey)
-                        .textFieldStyle(.plain)
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                        .padding(.vertical, AppMetrics.rowVertical)
-                    rowDivider
-                    Picker("Output Language", selection: $preferredLanguage) {
-                        ForEach(PreferredLanguage.allCases) { language in
-                            Text(language.title).tag(language.rawValue)
-                        }
+                sectionCard("AI PROCESSING") {
+                    Text("How notes are organized")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                        .padding(.top, AppMetrics.rowVertical)
+                    ForEach(AIProcessingMode.allCases) { mode in
+                        processingModeRow(mode)
                     }
-                    .padding(.vertical, AppMetrics.rowVertical)
-                    rowDivider
-                    Toggle(isOn: $imageUsesSeparateEndpoint) {
-                        Label("Use a separate model for photos", systemImage: "photo.tv")
-                    }
-                    .padding(.vertical, AppMetrics.rowVertical)
-                    if imageUsesSeparateEndpoint {
-                        TextField("Image Base URL", text: $imageBaseURL)
-                            .textFieldStyle(.plain)
-                            .textContentType(.URL)
-                            .autocorrectionDisabled()
-                            .padding(.vertical, AppMetrics.rowVertical)
-                        rowDivider
-                        TextField("Image Model", text: $imageModel)
-                            .textFieldStyle(.plain)
-                            .autocorrectionDisabled()
-                            .padding(.vertical, AppMetrics.rowVertical)
-                        rowDivider
-                        SecureField("Image API Key (stored in Keychain)", text: $imageAPIKey)
-                            .textFieldStyle(.plain)
-                            .autocorrectionDisabled()
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            #endif
-                            .padding(.vertical, AppMetrics.rowVertical)
-                    }
-                    Text("When enabled, photos are sent directly to the image model (it must support images). When off, photos are only OCR-read on device and the recognized text goes to the text model.")
+                    Text(processingModeDescription)
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
                         .padding(.bottom, AppMetrics.rowVertical)
-                    rowDivider
-                    HStack(spacing: 12) {
-                        Button {
-                            saveAISettings()
-                        } label: {
-                            Label("Save AI Settings", systemImage: "checkmark.circle.fill")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        if aiSettingsSaved {
-                            Label("Saved", systemImage: "checkmark")
-                                .font(.caption)
-                                .foregroundStyle(Theme.accent)
-                        }
-                        Spacer()
+                }
+
+                if isLocalOnly {
+                    sectionCard("LOCAL ENHANCEMENT MODEL") {
+                        localModelRows
                     }
-                    .padding(.vertical, AppMetrics.rowVertical)
+                    sectionCard("ON-DEVICE CAPABILITIES") {
+                        localCapabilityRows
+                        Text("Even without the enhancement model, ClipNest still does basic offline organizing and OCR.")
+                            .font(.caption)
+                            .foregroundStyle(Theme.mutedInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.vertical, AppMetrics.rowVertical)
+                    }
+                }
+
+                sectionCard("ONLINE AI") {
+                    if isLocalOnly {
+                        Label("On-device mode never sends anything to the internet.",
+                              systemImage: "lock.fill")
+                            .font(.callout)
+                            .foregroundStyle(Theme.mutedInk)
+                            .padding(.vertical, AppMetrics.cardPadding)
+                    } else {
+                        onlineAISettings
+                    }
                 }
                 .onChange(of: aiBaseURL) { _, _ in aiSettingsSaved = false }
                 .onChange(of: aiModel) { _, _ in aiSettingsSaved = false }
                 .onChange(of: preferredLanguage) { _, _ in aiSettingsSaved = false }
                 .onChange(of: apiKey) { _, _ in aiSettingsSaved = false }
-        .onChange(of: imageUsesSeparateEndpoint) { _, _ in aiSettingsSaved = false }
-        .onChange(of: imageBaseURL) { _, _ in aiSettingsSaved = false }
-        .onChange(of: imageModel) { _, _ in aiSettingsSaved = false }
-        .onChange(of: imageAPIKey) { _, _ in aiSettingsSaved = false }
+                .onChange(of: imageUsesSeparateEndpoint) { _, _ in aiSettingsSaved = false }
+                .onChange(of: imageBaseURL) { _, _ in aiSettingsSaved = false }
+                .onChange(of: imageModel) { _, _ in aiSettingsSaved = false }
+                .onChange(of: imageAPIKey) { _, _ in aiSettingsSaved = false }
+
+                sectionCard("ON-DEVICE NOTE GENERATION") {
+                    Toggle(isOn: $localModelPreload) {
+                        Label("Keep the model ready", systemImage: "bolt.fill")
+                    }
+                    .padding(.vertical, AppMetrics.rowVertical)
+                    Text("Loads the weights while you browse, so the first capture is not the slow one. Costs about 350 MB of memory while the app is open; they are still released on memory pressure and when the app goes to the background.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, AppMetrics.rowVertical)
+                    rowDivider
+                    Picker(selection: $localBodyStyle) {
+                        ForEach(LocalBodyStyle.allCases, id: \.rawValue) { style in
+                            Text(style.displayName).tag(style.rawValue)
+                        }
+                    } label: {
+                        Label("Note body", systemImage: "doc.plaintext")
+                    }
+                    .padding(.vertical, AppMetrics.rowVertical)
+                    Text((LocalBodyStyle(rawValue: localBodyStyle) ?? .default).explanation)
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, AppMetrics.rowVertical)
+                    rowDivider
+                }
+
+                sectionCard("LOCAL SEARCH") {
+                    Toggle(isOn: $localSemanticSearch) {
+                        Label("Smart Search", systemImage: "sparkle.magnifyingglass")
+                    }
+                    .padding(.vertical, AppMetrics.rowVertical)
+                    .onChange(of: localSemanticSearch) { _, enabled in
+                        search.setSemanticSearchEnabled(enabled)
+                    }
+                    Text(VaultSearchMode.smart.description)
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                        .padding(.bottom, AppMetrics.rowVertical)
+                    rowDivider
+                    Toggle(isOn: $localQueryExpansion) {
+                        Label("Expand queries with the local model", systemImage: "text.append")
+                    }
+                    .padding(.vertical, AppMetrics.rowVertical)
+                    Text("Adds the keywords the local model reads out of your question before searching. Needs the enhancement model; search works without it.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, AppMetrics.rowVertical)
+                    rowDivider
+                    HStack(spacing: 12) {
+                        Label(search.isIndexing
+                              ? String(localized: "Indexing…")
+                              : String(localized: "\(search.indexedChunkCount) indexed passages"),
+                              systemImage: "text.magnifyingglass")
+                            .font(.callout)
+                        Spacer()
+                        Button {
+                            search.rebuild()
+                        } label: {
+                            Label("Rebuild Index", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(search.isIndexing || store.rootURL == nil)
+                    }
+                    .padding(.vertical, AppMetrics.rowVertical)
+                    if let statistics = search.statistics {
+                        Text("Last pass: \(statistics.indexedFiles) notes · \(statistics.skippedFiles) unchanged · \(statistics.removedFiles) removed")
+                            .font(.caption)
+                            .foregroundStyle(Theme.mutedInk)
+                            .padding(.bottom, AppMetrics.rowVertical)
+                    }
+                }
 
                 sectionCard("CLASSIFICATION") {
                     Toggle(isOn: $autoClassify) {
@@ -377,11 +430,289 @@ struct SettingsView: View {
             guard enabled else { return }
             Task { await captureCoordinator.sceneDidBecomeActive() }
         }
-        .onAppear { iconPreference = AppIconManager.current }
+        .onAppear {
+            iconPreference = AppIconManager.current
+            capabilities = LocalAICapabilities.current()
+            modelManager.manifestURL = LocalModelManager.configuredManifestURL()
+            modelManager.refresh()
+        }
         .onChange(of: iconPreference) { _, preference in
             AppIconManager.set(preference)
         }
         // Bridge the importer used elsewhere — settings just toggles the request flag.
+    }
+
+    // MARK: - AI processing
+
+    /// Local-only mode hides every online field, so the privacy promise is visible in the UI
+    /// rather than only documented (spec §27).
+    private var isLocalOnly: Bool {
+        AIProcessingMode(rawValue: aiProcessingMode) == .local
+    }
+
+    private var processingModeDescription: String {
+        (AIProcessingMode(rawValue: aiProcessingMode) ?? .recommended).description
+    }
+
+    private func processingModeRow(_ mode: AIProcessingMode) -> some View {
+        let selected = AIProcessingMode(rawValue: aiProcessingMode) == mode
+        return Button {
+            aiProcessingMode = mode.rawValue
+            capabilities = LocalAICapabilities.current()
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(selected ? Theme.accent : Theme.mutedInk)
+                    .font(.system(size: 13))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mode.title)
+                        .foregroundStyle(Theme.ink)
+                    Text(mode.description)
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, AppMetrics.rowVertical)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The downloadable enhancement model (China plan §3, §28, §30).
+    ///
+    /// Downloads go to the CDN configured here, never to Hugging Face, and the app is fully
+    /// usable while this says "not downloaded" — the card exists to make the *optional* nature
+    /// of the 350 MB obvious rather than to gate anything.
+    @ViewBuilder
+    private var localModelRows: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "brain")
+                .font(.system(size: 13))
+                .foregroundStyle(modelManager.state.isReady ? Theme.accent : Theme.mutedInk)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(modelManager.descriptor.displayName)
+                    .foregroundStyle(Theme.ink)
+                Text("\(modelManager.descriptor.detail) · \(Self.sizeDescription(modelManager.descriptor.approximateBytes))")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedInk)
+                Text(modelStatusDescription)
+                    .font(.caption)
+                    .foregroundStyle(modelManager.state.isReady ? Theme.accent : Theme.mutedInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.top, AppMetrics.rowVertical)
+
+        if case let .downloading(fraction) = modelManager.state {
+            ProgressView(value: max(0, min(fraction, 1)))
+                .padding(.vertical, AppMetrics.rowVertical)
+        }
+
+        HStack(spacing: 10) {
+            switch modelManager.state {
+            case .downloading:
+                Button {
+                    modelManager.cancelDownload()
+                } label: {
+                    Label("Cancel", systemImage: "xmark")
+                }
+            case .installed:
+                Button(role: .destructive) {
+                    modelManager.deleteModel()
+                } label: {
+                    Label("Delete Model", systemImage: "trash")
+                }
+            default:
+                Button {
+                    Task { await modelManager.download() }
+                } label: {
+                    Label("Download Model", systemImage: "arrow.down.circle")
+                }
+                .disabled(!canStartModelDownload)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, AppMetrics.rowVertical)
+
+        if !LocalModelManager.isDownloadConfigured {
+            rowDivider
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Model download server")
+                    .font(.caption)
+                    .foregroundStyle(Theme.ink)
+                Text("Point this at the CDN that serves model-manifest.json. Runtime downloads never use Hugging Face.")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.mutedInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                TextField("https://…/qwen3-0.6b-4bit/", text: $modelManifestURL)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11, design: .monospaced))
+                    .onSubmit { modelManager.manifestURL = LocalModelManager.configuredManifestURL() }
+            }
+            .padding(.vertical, AppMetrics.rowVertical)
+        }
+    }
+
+    private var canStartModelDownload: Bool {
+        // An ineligible device can never run the model, so offering the download would only
+        // waste 350 MB of the user's bandwidth.
+        if case .unsupportedDevice = modelManager.state { return false }
+        return LocalModelManager.isDownloadConfigured
+    }
+
+    private var modelStatusDescription: String {
+        switch modelManager.state {
+        case .installed(let version, let bytes):
+            return String(localized: "Installed · v\(version) · \(Self.sizeDescription(bytes))")
+        case .downloading(let fraction):
+            return String(localized: "Downloading… \(Int(fraction * 100))%")
+        case .notInstalled:
+            return String(localized: "Not downloaded")
+        case .unsupportedDevice(let reason):
+            return reason
+        case .failed(let reason):
+            return reason
+        }
+    }
+
+    static func sizeDescription(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+
+    /// What this install can actually do right now, so "why didn't local AI work?" never has
+    /// to be guessed (China plan §30).
+    @ViewBuilder
+    private var localCapabilityRows: some View {
+        if let capabilities {
+            capabilityRow(title: "OCR",
+                          status: capabilities.visionOCR,
+                          fallback: String(localized: "Apple Vision · fully offline"))
+            rowDivider
+            capabilityRow(title: String(localized: "Basic text processing"),
+                          status: capabilities.localNoteEngine,
+                          fallback: String(localized: "ClipNest Local Lite · fully offline"))
+            rowDivider
+            capabilityRow(title: String(localized: "Enhanced AI"),
+                          status: capabilities.enhancedModel,
+                          fallback: LocalModelDescriptor.qwen3.displayName)
+            if capabilities.sentenceEmbedding.isAvailable {
+                rowDivider
+                capabilityRow(title: String(localized: "Semantic Search"),
+                              status: capabilities.sentenceEmbedding,
+                              fallback: String(localized: "Apple Natural Language · fully offline"))
+            }
+        } else {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Checking on-device capabilities…")
+                    .font(.callout)
+                    .foregroundStyle(Theme.mutedInk)
+            }
+            .padding(.vertical, AppMetrics.rowVertical)
+        }
+    }
+
+    private func capabilityRow(title: String,
+                               status: LocalAICapabilities.Status,
+                               fallback: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: status.isAvailable ? "checkmark.circle.fill" : "exclamationmark.circle")
+                .font(.system(size: 12))
+                .foregroundStyle(status.isAvailable ? Theme.accent : .orange)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.callout)
+                Text(status.isAvailable ? (fallback ?? status.detail) : status.detail)
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, AppMetrics.rowVertical)
+    }
+
+    /// The OpenAI-compatible settings, unchanged from before — just relocated.
+    @ViewBuilder
+    private var onlineAISettings: some View {
+        TextField("Base URL", text: $aiBaseURL)
+            .textFieldStyle(.plain)
+            .textContentType(.URL)
+            .autocorrectionDisabled()
+            .padding(.vertical, AppMetrics.rowVertical)
+        rowDivider
+        TextField("Model", text: $aiModel)
+            .textFieldStyle(.plain)
+            .autocorrectionDisabled()
+            .padding(.vertical, AppMetrics.rowVertical)
+        rowDivider
+        SecureField("API Key (stored in Keychain)", text: $apiKey)
+            .textFieldStyle(.plain)
+            .autocorrectionDisabled()
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            #endif
+            .padding(.vertical, AppMetrics.rowVertical)
+        rowDivider
+        Picker("Output Language", selection: $preferredLanguage) {
+            ForEach(PreferredLanguage.allCases) { language in
+                Text(language.title).tag(language.rawValue)
+            }
+        }
+        .padding(.vertical, AppMetrics.rowVertical)
+        rowDivider
+        Toggle(isOn: $imageUsesSeparateEndpoint) {
+            Label("Use a separate model for photos", systemImage: "photo.tv")
+        }
+        .padding(.vertical, AppMetrics.rowVertical)
+        if imageUsesSeparateEndpoint {
+            TextField("Image Base URL", text: $imageBaseURL)
+                .textFieldStyle(.plain)
+                .textContentType(.URL)
+                .autocorrectionDisabled()
+                .padding(.vertical, AppMetrics.rowVertical)
+            rowDivider
+            TextField("Image Model", text: $imageModel)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+                .padding(.vertical, AppMetrics.rowVertical)
+            rowDivider
+            SecureField("Image API Key (stored in Keychain)", text: $imageAPIKey)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .padding(.vertical, AppMetrics.rowVertical)
+        }
+        Text("When enabled, photos are sent directly to the image model (it must support images). When off, photos are only OCR-read on device and the recognized text goes to the text model. In On-Device mode the image model is never called.")
+            .font(.caption)
+            .foregroundStyle(Theme.mutedInk)
+            .padding(.bottom, AppMetrics.rowVertical)
+        rowDivider
+        HStack(spacing: 12) {
+            Button {
+                saveAISettings()
+            } label: {
+                Label("Save AI Settings", systemImage: "checkmark.circle.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            if aiSettingsSaved {
+                Label("Saved", systemImage: "checkmark")
+                    .font(.caption)
+                    .foregroundStyle(Theme.accent)
+            }
+            Spacer()
+        }
+        .padding(.vertical, AppMetrics.rowVertical)
     }
 
     // MARK: - Obsidian shortcut

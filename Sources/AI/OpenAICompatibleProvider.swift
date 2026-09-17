@@ -1,12 +1,23 @@
 import Foundation
 
-struct OpenAICompatibleProvider: AIProvider {
+/// The OpenAI-compatible chat-completions client. It conforms to both provider protocols:
+/// `AIProvider` is the original surface, and `NoteGenerating` lets `NoteGenerationRouter`
+/// hand it to the coordinator directly (with an injectable session for tests).
+struct OpenAICompatibleProvider: AIProvider, NoteGenerating {
     let configuration: AIConfiguration
     private let session: URLSession
 
     init(configuration: AIConfiguration, session: URLSession = .shared) {
         self.configuration = configuration
         self.session = session
+    }
+
+    func generate(from content: ClipboardContent,
+                  existingCategories: [String],
+                  preferredLanguage: PreferredLanguage) async throws -> GeneratedNote {
+        try await generateNote(from: content,
+                               existingCategories: existingCategories,
+                               preferredLanguage: preferredLanguage)
     }
 
     func generateNote(from content: ClipboardContent,

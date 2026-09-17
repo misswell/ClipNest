@@ -4,11 +4,13 @@ import SwiftUI
 struct MarkdownVaultApp: App {
     @StateObject private var store: VaultStore
     @StateObject private var captureCoordinator: CaptureCoordinator
+    @StateObject private var search: LocalSearchController
 
     init() {
         let store = VaultStore()
         _store = StateObject(wrappedValue: store)
         _captureCoordinator = StateObject(wrappedValue: CaptureCoordinator(store: store))
+        _search = StateObject(wrappedValue: LocalSearchController())
     }
 
     var body: some Scene {
@@ -17,7 +19,13 @@ struct MarkdownVaultApp: App {
                 .environmentObject(store)
                 .environmentObject(store.selection)
                 .environmentObject(captureCoordinator)
+                .environmentObject(search)
                 .tint(Theme.accent)
+                .task {
+                    // The local model is loaded on demand and released under memory pressure
+                    // or when the app goes to the background (China plan §26).
+                    await LocalModelRuntime.shared.startObservingSystemPressure()
+                }
         }
         #if os(macOS)
         .defaultSize(width: 1200, height: 760)

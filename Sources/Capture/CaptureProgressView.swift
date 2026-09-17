@@ -28,6 +28,25 @@ struct CaptureProgressView: View {
                     Text(coordinator.statusMessage.isEmpty ? coordinator.state.title : coordinator.statusMessage)
                         .font(.subheadline.weight(.medium))
                         .lineLimit(2)
+
+                    // Show what the model has produced so far, so a multi-second local capture
+                    // reads as work in progress rather than a stalled spinner.
+                    if let preview = coordinator.generationProgress?.preview, !preview.isEmpty {
+                        VStack(alignment: .leading, spacing: 1) {
+                            if let title = preview.title, !title.isEmpty {
+                                Text(title)
+                                    .font(.footnote.weight(.medium))
+                                    .lineLimit(1)
+                            }
+                            if let summary = preview.summary, !summary.isEmpty {
+                                Text(summary)
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.mutedInk)
+                                    .lineLimit(2)
+                            }
+                        }
+                        .padding(.top, 1)
+                    }
                 }
                 Spacer(minLength: 0)
             }

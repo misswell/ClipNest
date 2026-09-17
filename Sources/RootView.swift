@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var captureCoordinator: CaptureCoordinator
     @EnvironmentObject private var store: VaultStore
+    @EnvironmentObject private var search: LocalSearchController
     @State private var appTab = 0
     @State private var showVaultImporter = false
     @Environment(\.scenePhase) private var scenePhase
@@ -47,9 +48,25 @@ struct RootView: View {
             }
             .task {
                 await captureCoordinator.start()
+                search.attach(vaultRoot: store.rootURL)
+                search.indexIfNeeded()
+            }
+            .onChange(of: store.rootURL) { _, newRoot in
+                search.attach(vaultRoot: newRoot)
+                search.indexIfNeeded()
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
+                // Warm the on-device model *before* the capture asks for it.
+                //
+                // Coming back from another app is exactly when this app's clipboard workflow
+                // starts — and backgrounding is also what unloads the model (§26). So this is the
+                // one moment where the whole load (measured at 1.35 s on an iPhone 15 Pro, about
+                // half the first capture's total) would otherwise land on the critical path every
+                // single time. Starting it here overlaps the load with reading the clipboard and
+                // running OCR; `LocalModelRuntime` single-flights the load, so the capture joins
+                // this one instead of starting a second.
+                captureCoordinator.preloadLocalModelIfEnabled()
                 Task { await captureCoordinator.sceneDidBecomeActive() }
             }
     }

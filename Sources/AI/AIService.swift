@@ -12,6 +12,21 @@ protocol NoteGenerating {
                   preferredLanguage: PreferredLanguage) async throws -> GeneratedNote
 }
 
+/// A generator that can say what it is doing while it works.
+///
+/// Separate from `NoteGenerating` so nothing is forced to implement progress it has no way to
+/// report — the online provider and Local Lite keep their single-call shape, and callers fall
+/// back to the plain method when this conformance is absent.
+///
+/// `onProgress` may be invoked from any thread and many times per second; implementations must
+/// not assume it runs on the main actor.
+protocol ProgressReportingNoteGenerating: NoteGenerating {
+    func generate(from content: ClipboardContent,
+                  existingCategories: [String],
+                  preferredLanguage: PreferredLanguage,
+                  onProgress: (@Sendable (NoteGenerationProgress) -> Void)?) async throws -> GeneratedNote
+}
+
 enum AIServiceError: LocalizedError {
     case invalidConfiguration
     case invalidEndpoint

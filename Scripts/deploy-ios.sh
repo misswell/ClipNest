@@ -34,7 +34,8 @@ fi
 echo "==> building for $DEVICE (team $TEAM)"
 xcodebuild -project "$ROOT/ClipNest.xcodeproj" -scheme "$SCHEME" \
   -destination "id=$DEVICE" -configuration Debug -derivedDataPath "$DERIVED" \
-  -skipPackagePluginValidation -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
+  -skipPackagePluginValidation -skipMacroValidation \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
   DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic \
   CODE_SIGN_IDENTITY="Apple Development" PROVISIONING_PROFILE_SPECIFIER= \
   build
@@ -45,3 +46,29 @@ xcrun devicectl device install app --device "$DEVICE" "$APP"
 
 echo "==> launching"
 xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE_ID"
+
+# On-device AI verification (§36⑫)
+# ---------------------------------
+# `ClipNestTests` is a macOS-only target, so its live-inference tests cannot run on an
+# iPhone. `ClipNestDeviceTests` carries the device-safe subset:
+#
+#   xcodebuild test -project ClipNest.xcodeproj -scheme ClipNestDevice \
+#     -destination "id=<UDID>" -configuration Debug \
+#     -skipPackagePluginValidation -skipMacroValidation \
+#     -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
+#     DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic \
+#     CODE_SIGN_IDENTITY="Apple Development" PROVISIONING_PROFILE_SPECIFIER=
+#
+# Those tests need the weights inside the app's data container. There is no CDN configured
+# in this repo, so push them over USB instead:
+#
+#   REL="Library/Application Support/ClipNest/Models/qwen3-0.6b-4bit"
+#   for f in /tmp/qwen-dl/*; do
+#     xcrun devicectl device copy to --device "$DEVICE" \
+#       --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
+#       --source "$f" --destination "$REL/$(basename "$f")"
+#   done
+#
+# Get the file list from Scripts/fetch-local-model.sh first, and copy
+# model-manifest.json last: `isInstalled()` treats that file as the authoritative
+# "this is complete" record, so it must not land before the weights do.

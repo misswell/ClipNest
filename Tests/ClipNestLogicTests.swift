@@ -108,6 +108,55 @@ final class ClipNestLogicTests: XCTestCase {
         XCTAssertTrue(gate.accepts(retriedSecondRequest))
     }
 
+    /// The bug this pair of tests exists for: opening the *first* note worked and opening a second
+    /// one spun forever.
+    ///
+    /// SwiftUI cancels and replaces `.task(id:)` on every selection change, and cancellation is
+    /// cooperative — so an abandoned task still runs its body. When it called `begin` it bumped
+    /// the generation *after* the live task's, won the gate, and read the note the user had just
+    /// navigated away from. `loadState` then reached `.ready` while `loadedURL` still named the
+    /// abandoned document, so the editor's "current document is ready" check could never be
+    /// satisfied and the spinner never stopped.
+    func testAnAbandonedTaskCannotClaimTheLoadFromTheLiveOne() {
+        var gate = DocumentLoadRequestGate()
+        let abandoned = URL(fileURLWithPath: "/tmp/First.md")
+        let wanted = URL(fileURLWithPath: "/tmp/Second.md")
+
+        // The live task claims the second document.
+        let live = gate.begin(for: wanted, isCancelled: false)
+        let liveRequest = try? XCTUnwrap(live)
+
+        // The abandoned first task's body finally runs, already cancelled.
+        let stale = gate.begin(for: abandoned, isCancelled: true)
+        XCTAssertNil(stale, "a cancelled task must not claim a load at all")
+
+        XCTAssertNotNil(liveRequest)
+        XCTAssertTrue(gate.accepts(liveRequest!),
+                      "the live selection must still own the state after an abandoned task runs")
+        XCTAssertEqual(gate.currentDocumentURL, wanted.standardizedFileURL)
+    }
+
+    func testAnAbandonedTaskCannotDisplaceALiveSelectionForTheSameURL() {
+        var gate = DocumentLoadRequestGate()
+        let url = URL(fileURLWithPath: "/tmp/Note.md")
+
+        let live = gate.begin(for: url, isCancelled: false)
+        let stale = gate.begin(for: url, isCancelled: true)
+
+        XCTAssertNil(stale)
+        XCTAssertTrue(gate.accepts(try! XCTUnwrap(live)),
+                      "a retry of the same URL must not be cancelled out by an earlier task")
+    }
+
+    /// The ordinary path must be untouched.
+    func testAnUncancelledBeginStillClaimsTheLoad() {
+        var gate = DocumentLoadRequestGate()
+        let url = URL(fileURLWithPath: "/tmp/Note.md")
+        let request = gate.begin(for: url, isCancelled: false)
+        XCTAssertNotNil(request)
+        XCTAssertTrue(gate.accepts(request!))
+    }
+
     @MainActor
     func testVaultStoreReadsMarkdownContentFromNestedFolder() async throws {
         let root = FileManager.default.temporaryDirectory

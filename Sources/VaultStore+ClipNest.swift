@@ -70,6 +70,49 @@ extension VaultStore {
         homeSnapshot.categories
     }
 
+    /// Semantic fingerprints for the local classifier (spec §15): each top-level folder
+    /// contributes its name, its immediate sub-folder names, and the titles of the notes it
+    /// already holds. Built from the cached home snapshot so classification never walks the
+    /// vault again.
+    func categoryProfiles(limitPerCategory: Int = 12) -> [CategoryProfile] {
+        let names = topLevelCategories()
+        guard !names.isEmpty else { return [] }
+
+        var titlesByCategory: [String: [String]] = [:]
+        let rootPath = rootURL?.standardizedFileURL.path ?? ""
+        for url in homeSnapshot.markdownFiles {
+            let components = url.standardizedFileURL.pathComponents
+            guard components.count >= 2 else { continue }
+            // components: ..., <category>, <file>
+            let category = components[components.count - 2]
+            guard names.contains(category) else { continue }
+            guard titlesByCategory[category, default: []].count < limitPerCategory else { continue }
+            titlesByCategory[category, default: []].append(
+                url.deletingPathExtension().lastPathComponent)
+        }
+        _ = rootPath
+
+        return names.map { name in
+            CategoryProfile(name: name,
+                            keywords: subdirectoryNames(inCategory: name),
+                            noteTitles: titlesByCategory[name] ?? [])
+        }
+    }
+
+    /// Immediate sub-folder names double as curated keywords for a category.
+    private func subdirectoryNames(inCategory category: String) -> [String] {
+        guard let rootURL else { return [] }
+        let directory = rootURL.appendingPathComponent(category, isDirectory: true)
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        return children
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            .map(\.lastPathComponent)
+    }
+
     func recentMarkdownFiles(limit: Int = 10) -> [URL] {
         Array(homeSnapshot.markdownFiles.prefix(max(0, limit)))
     }

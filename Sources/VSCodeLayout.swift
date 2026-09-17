@@ -7,6 +7,8 @@ import AppKit
 struct VSCodeLayout: View {
     @EnvironmentObject var store: VaultStore
     @EnvironmentObject private var selection: VaultSelection
+    /// Vault-wide search, so the top bar's palette can surface content hits, not just names.
+    @EnvironmentObject var search: LocalSearchController
     @StateObject private var terminals = TerminalController()
 
     @State private var activity: ActivityItem = .explorer
@@ -73,9 +75,18 @@ struct VSCodeLayout: View {
         .preferredColorScheme(.dark)
         .overlay {
             if showQuickOpen {
-                QuickOpenPalette(isPresented: $showQuickOpen) { url in
-                    selection.fileURL = url
-                }
+                QuickOpenPalette(isPresented: $showQuickOpen,
+                                 onOpen: { url in
+                                     selection.fileURL = url
+                                 },
+                                 onSearchAll: { query in
+                                     // Hand the query to the full side bar, which keeps the
+                                     // chosen search mode visible while browsing results.
+                                     search.query = query
+                                     activity = .search
+                                     sidebarVisible = true
+                                     showQuickOpen = false
+                                 })
             }
         }
         .task { store.restoreVaultIfNeeded() }
@@ -431,11 +442,24 @@ private struct DragDivider: View {
 /// ⌘P quick-open palette: fuzzy filename filter over the vault, floating from the top.
 private struct QuickOpenPalette: View {
     @EnvironmentObject var store: VaultStore
+    @EnvironmentObject var search: LocalSearchController
     @Binding var isPresented: Bool
     var onOpen: (URL) -> Void
+    var onSearchAll: (String) -> Void
 
     @State private var query = ""
     @FocusState private var focused: Bool
+
+    /// Content hits shown under the file matches. The controller owns the debounce and runs
+    /// the query off the main actor, so typing stays smooth (spec §38, §43).
+    private var contentResults: [SearchResult] {
+        guard !trimmedQuery.isEmpty else { return [] }
+        return Array(search.results.prefix(5))
+    }
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -443,12 +467,12 @@ private struct QuickOpenPalette: View {
                 .ignoresSafeArea()
                 .onTapGesture { isPresented = false }
             VStack(spacing: 0) {
-                TextField("Search files by name", text: $query)
+                TextField("Search files and notes", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .padding(10)
                     .focused($focused)
-                    .onSubmit { if let first = results.first { open(first) } }
+                    .onSubmit { openFirstResult() }
                 Divider().overlay(VSCode.border)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -464,9 +488,61 @@ private struct QuickOpenPalette: View {
                             }
                             .buttonStyle(.plain)
                         }
+
+                        if !contentResults.isEmpty {
+                            sectionHeader("IN NOTE CONTENT")
+                            ForEach(contentResults) { result in
+                                Button { open(result.fileURL) } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "text.magnifyingglass")
+                                                .font(.system(size: 11))
+                                                .foregroundStyle(Color(hex: 0xD7BA7D))
+                                            Text(result.title)
+                                                .font(.system(size: 13))
+                                                .foregroundStyle(VSCode.fg)
+                                                .lineLimit(1)
+                                            Spacer()
+                                            Text(result.matchReason)
+                                                .font(.system(size: 10))
+                                                .foregroundStyle(VSCode.muted)
+                                                .lineLimit(1)
+                                        }
+                                        if !result.snippet.isEmpty {
+                                            Text(result.snippet)
+                                                .font(.system(size: 11))
+                                                .foregroundStyle(VSCode.muted)
+                                                .lineLimit(2)
+                                        }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 5)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                 }
                 .frame(maxHeight: 360)
+
+                if !trimmedQuery.isEmpty {
+                    Divider().overlay(VSCode.border)
+                    Button { onSearchAll(trimmedQuery) } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass").font(.system(size: 11))
+                            Text("Search all notes for “\(trimmedQuery)”")
+                                .font(.system(size: 11))
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 26)
+                        .foregroundStyle(VSCode.muted)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Opens the Search side bar with smart or exact matching")
+                }
             }
             .frame(width: 560)
             .background(Color(hex: 0x252526), in: RoundedRectangle(cornerRadius: 8))
@@ -476,6 +552,29 @@ private struct QuickOpenPalette: View {
         }
         .onAppear { focused = true }
         .onExitCommand { isPresented = false }
+        .onChange(of: query) { _, newValue in
+            // The controller debounces this and searches off the main actor.
+            search.query = newValue
+        }
+        // Deliberately no `onDisappear` reset: the query is shared with the Search side bar,
+        // and clearing it here would wipe a query the user typed there.
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(VSCode.muted)
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
+    }
+
+    private func openFirstResult() {
+        if let first = results.first {
+            open(first)
+        } else if let first = contentResults.first {
+            open(first.fileURL)
+        }
     }
 
     private func open(_ url: URL) { onOpen(url); isPresented = false }
@@ -501,35 +600,103 @@ private struct QuickOpenPalette: View {
     }
 }
 
-/// Minimal VS Code-style search side bar (in-vault filename filter).
+/// VS Code-style search side bar. Searches note content, OCR text and semantics across the
+/// vault — not just file names (spec §18, §43, §44).
 private struct SearchSidebar: View {
     @EnvironmentObject var store: VaultStore
-    @State private var query = ""
+    @EnvironmentObject var search: LocalSearchController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("SEARCH")
-                .font(.system(size: 11, weight: .semibold)).foregroundStyle(VSCode.muted)
-                .padding(.horizontal, 12).frame(height: 35)
+            HStack(spacing: 6) {
+                Text("SEARCH")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(VSCode.muted)
+                Spacer()
+                if search.isIndexing {
+                    ProgressView().controlSize(.small).scaleEffect(0.7)
+                } else {
+                    Button {
+                        search.rebuild()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(VSCode.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Rebuild the local search index")
+                }
+            }
+            .padding(.horizontal, 12).frame(height: 35)
             Divider().overlay(VSCode.border)
-            TextField("Search files", text: $query)
+
+            TextField("Search notes", text: $search.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .padding(6)
                 .background(Color(hex: 0x3C3C3C), in: RoundedRectangle(cornerRadius: 4))
-                .padding(8)
+                .padding(.horizontal, 8)
+                .padding(.top, 8)
+
+            Picker("", selection: $search.mode) {
+                ForEach(VaultSearchMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+
+            if let error = search.errorMessage {
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+            }
+
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(matches, id: \.self) { url in
-                        Button { store.selectedFileURL = url } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "doc.text").font(.system(size: 11)).foregroundStyle(Color(hex: 0x6FB3D2))
-                                Text(url.lastPathComponent).font(.system(size: 12)).foregroundStyle(VSCode.fg).lineLimit(1)
-                                Spacer()
+                    ForEach(search.results) { result in
+                        Button { store.selectedFileURL = result.fileURL } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "doc.text")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(Color(hex: 0x6FB3D2))
+                                    Text(result.title)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(VSCode.fg)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 4)
+                                }
+                                Text(relativePath(result.fileURL))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(VSCode.muted)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                if !result.snippet.isEmpty {
+                                    Text(result.snippet)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(VSCode.muted)
+                                        .lineLimit(2)
+                                }
+                                Text(result.matchReason)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(Color(hex: 0x6FB3D2))
+                                    .lineLimit(1)
                             }
-                            .padding(.horizontal, 12).frame(height: 22).contentShape(Rectangle())
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                    }
+                    if search.results.isEmpty, !search.query.isEmpty, !search.isIndexing {
+                        Text(search.hasIndex ? "No matches" : "Indexing the vault…")
+                            .font(.system(size: 11))
+                            .foregroundStyle(VSCode.muted)
+                            .padding(12)
                     }
                 }
             }
@@ -538,16 +705,11 @@ private struct SearchSidebar: View {
         .background(VSCode.sidebarBg)
     }
 
-    private var matches: [URL] {
-        guard !query.isEmpty, let root = store.rootURL else { return [] }
-        var out: [URL] = []
-        if let en = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) {
-            for case let u as URL in en where u.lastPathComponent.localizedCaseInsensitiveContains(query) {
-                if FileNode.editableExtensions.contains(u.pathExtension.lowercased()) { out.append(u) }
-                if out.count >= 200 { break }
-            }
-        }
-        return out
+    private func relativePath(_ url: URL) -> String {
+        guard let root = store.rootURL else { return url.lastPathComponent }
+        return url.deletingLastPathComponent().path
+            .replacingOccurrences(of: root.path, with: "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 }
 

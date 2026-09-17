@@ -39,6 +39,36 @@ struct AIImageConfiguration: Equatable {
 }
 
 enum AIConfigurationStore {
+    /// Default is `local` (China plan §8): a fresh install is private and offline-capable.
+    ///
+    /// An unrecognised stored value also resolves to `local`. That covers an install upgrading
+    /// from the earlier three-mode build, where `automatic` was persisted: preferring the
+    /// device is the safe reading of that preference, since the alternative would silently
+    /// send content to a network the user may no longer expect to be used.
+    static func loadProcessingMode() -> AIProcessingMode {
+        let raw = UserDefaults.standard.string(forKey: ClipNestSettings.aiProcessingMode)
+            ?? AIProcessingMode.recommended.rawValue
+        return AIProcessingMode(rawValue: raw) ?? .recommended
+    }
+
+    static func saveProcessingMode(_ mode: AIProcessingMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: ClipNestSettings.aiProcessingMode)
+    }
+
+    static func loadLocalSemanticSearchEnabled() -> Bool {
+        UserDefaults.standard.object(forKey: ClipNestSettings.localSemanticSearch) as? Bool ?? true
+    }
+
+    /// §25: Qwen widens a search query with related keywords. On by default, and a no-op
+    /// unless a model is installed, so it costs nothing on a fresh install.
+    static func loadLocalQueryExpansionEnabled() -> Bool {
+        UserDefaults.standard.object(forKey: ClipNestSettings.localQueryExpansion) as? Bool ?? true
+    }
+
+    static func saveLocalQueryExpansionEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: ClipNestSettings.localQueryExpansion)
+    }
+
     static func load() -> AIConfiguration {
         let defaults = UserDefaults.standard
         let languageRaw = defaults.string(forKey: ClipNestSettings.aiPreferredLanguage)

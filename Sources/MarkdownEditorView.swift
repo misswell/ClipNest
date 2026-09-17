@@ -12,10 +12,27 @@ enum EditorMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var systemImage: String {
         switch self {
-        case .edit: return "square.and.pencil"
+        // `pencil` rather than `square.and.pencil`: the pencil-in-a-square carries its ink down
+        // and to the right, so inside a centred 44 pt bar target it reads as sitting lower than
+        // the eye beside it. A single diagonal glyph is optically centred, which matters more
+        // now that Edit and Preview are two states of one button — a mismatch made the button
+        // appear to jump when it flipped.
+        case .edit: return "pencil"
         case .split: return "rectangle.split.2x1"
         case .preview: return "eye"
         }
+    }
+}
+
+extension EditorMode {
+    /// The mode a single-button toggle offers while `current` is on screen.
+    ///
+    /// Compact widths offer only Edit and Preview, and one button carries both: the glyph names
+    /// the mode you get by tapping, so an eye appears while editing and a pencil while reading.
+    /// A `.split` current mode only occurs on wide layouts, where the toggle is not used; it
+    /// falls back to Preview, matching the initial mode for a document opened by tapping.
+    static func toggleTarget(from current: EditorMode) -> EditorMode {
+        current == .preview ? .edit : .preview
     }
 }
 
@@ -129,7 +146,10 @@ struct MarkdownEditorView: View {
         // Detached iCloud reads can finish after a newer document has already loaded. Give
         // this request a generation before the first suspension so stale results can never
         // overwrite the current editor state.
-        let loadRequest = loadRequestGate.begin(for: url)
+        // A cancelled `.task` still runs its body, so it must never be allowed to claim the load.
+        guard let loadRequest = loadRequestGate.begin(for: url, isCancelled: Task.isCancelled) else {
+            return
+        }
         // The host view is reused when the user switches notes, so `url` is already the
         // NEW document here while `text` still holds the previous one. Flush that pending
         // edit to its own file — never to the newly selected document.
@@ -151,28 +171,44 @@ struct MarkdownEditorView: View {
         await Task.yield()
         guard loadRequestGate.accepts(loadRequest) else { return }
         let target = normalizedURL
-        do {
-            let loaded = try await VaultFileAccess.shared.readText(at: target) { phase in
-                Task { @MainActor in
-                    guard loadRequestGate.accepts(loadRequest) else { return }
-                    switch phase {
-                    case .downloading:
-                        loadState = .downloading
-                    case .reading, .writing:
-                        loadState = .reading
+        // The read must not inherit this SwiftUI task's cancellation.
+        //
+        // SwiftUI cancels and restarts `.task(id:)` while a navigation transition is settling, and
+        // `VaultFileAccess.readData` throws `CancellationError` at its `Task.checkCancellation()`.
+        // Swallowing that left `loadState` sitting on `.reading` with no task left to move it —
+        // a spinner that never ends, which is exactly what opening a *second* note produced while
+        // the first was fine. `EditorPane` has carried this same guard for the same reason;
+        // the detached read applies its result whenever no newer load has superseded it.
+        let readTask = Task.detached(priority: .utility) { () -> Result<String, Error> in
+            do {
+                let loaded = try await VaultFileAccess.shared.readText(at: target) { phase in
+                    Task { @MainActor in
+                        guard loadRequestGate.accepts(loadRequest) else { return }
+                        switch phase {
+                        case .downloading:
+                            loadState = .downloading
+                        case .reading, .writing:
+                            loadState = .reading
+                        }
                     }
                 }
+                return .success(loaded)
+            } catch {
+                return .failure(error)
             }
-            guard loadRequestGate.accepts(loadRequest) else { return }
+        }
+
+        let result = await readTask.value
+        // Apply even if this SwiftUI task was transiently cancelled, but never over a newer load.
+        guard loadRequestGate.accepts(loadRequest) else { return }
+        switch result {
+        case .success(let loaded):
             loadedTextSnapshot = loaded
             text = loaded
             loadedURL = target
             hasLoadedText = true
             loadState = .ready
-        } catch is CancellationError {
-            // A newer load superseded this one; that task owns the state now.
-        } catch {
-            guard loadRequestGate.accepts(loadRequest) else { return }
+        case .failure(let error):
             loadState = .failed((error as? LocalizedError)?.errorDescription
                 ?? error.localizedDescription)
         }
@@ -304,17 +340,38 @@ struct MarkdownEditorView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        // One bar button per action. The navigation bar owns the spacing between controls and
-        // (on iOS 26) the glass-group padding, which a hand-spaced HStack defeats — icons then
-        // render cramped against each other inside the system-drawn capsule.
-        ToolbarItemGroup(placement: .primaryAction) {
-            ForEach(availableModes) { candidate in
-                AppToolbarIconButton(
-                    systemImage: candidate.systemImage,
-                    isSelected: mode == candidate,
-                    label: candidate.rawValue
-                ) {
-                    mode = candidate
+        // One `ToolbarItem` holding both controls, rather than two items in a group.
+        //
+        // Each icon already carries a 44 pt frame, so that frame *is* the touch target and the
+        // padding between glyphs. A `ToolbarItemGroup` adds roughly 23 pt of its own spacing on
+        // top: measured on device, the two icon centres sat 67 pt apart, which is what made the
+        // bar read as too wide. Keeping the frames and dropping the extra group spacing brings
+        // the centres to 44 pt, with the hit targets untouched.
+        ToolbarItem(placement: .primaryAction) {
+            HStack(spacing: 0) {
+                toolbarButtons
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var toolbarButtons: some View {
+        Group {
+            if availableModes.count == 2 {
+                // Compact widths only ever offer Edit and Preview, so two separate buttons spent
+                // 88 pt of bar on one binary choice — and the pair read as a wide, unevenly
+                // centred row next to the ellipsis. Collapsed into one toggle: the icon is the
+                // mode you get by tapping, so an eye while editing and a pencil while reading.
+                modeToggleButton
+            } else {
+                ForEach(availableModes) { candidate in
+                    AppToolbarIconButton(
+                        systemImage: candidate.systemImage,
+                        isSelected: mode == candidate,
+                        label: candidate.rawValue
+                    ) {
+                        mode = candidate
+                    }
                 }
             }
 
@@ -340,6 +397,18 @@ struct MarkdownEditorView: View {
                 }
                 .accessibilityLabel("More")
             }
+        }
+    }
+
+    /// The single Edit ⇄ Preview control used where only those two modes exist.
+    ///
+    /// The glyph names the destination rather than the current state, which is what makes a
+    /// one-button toggle legible: seeing an eye means tapping takes you to reading, seeing a
+    /// pencil means tapping takes you to editing.
+    private var modeToggleButton: some View {
+        let target = EditorMode.toggleTarget(from: effectiveMode)
+        return AppToolbarIconButton(systemImage: target.systemImage, label: target.rawValue) {
+            mode = target
         }
     }
 

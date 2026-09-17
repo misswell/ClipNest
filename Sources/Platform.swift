@@ -35,4 +35,18 @@ extension PlatformImage {
                        size: NSSize(width: cgImage.width, height: cgImage.height))
         #endif
     }
+
+    /// JPEG encoding for the vision-capable image endpoint, on either platform.
+    func jpegDataForUpload(compressionQuality: Double) -> Data? {
+        #if canImport(UIKit)
+        return jpegData(compressionQuality: compressionQuality)
+        #elseif canImport(AppKit)
+        guard let cgImage = ocrCGImage else { return nil }
+        let representation = NSBitmapImageRep(cgImage: cgImage)
+        return representation.representation(using: .jpeg,
+                                             properties: [.compressionFactor: compressionQuality])
+        #else
+        return nil
+        #endif
+    }
 }

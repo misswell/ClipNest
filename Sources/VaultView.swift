@@ -162,6 +162,10 @@ private struct VaultNavigationHost: View {
         .task {
             store.restoreVaultIfNeeded()
             navigationSelection = store.selectedFileURL
+            // Warm the on-device model while the user is browsing, so the first capture does
+            // not pay the load. A no-op in online mode, with no model installed, or when the
+            // preload setting is off.
+            captureCoordinator.preloadLocalModelIfEnabled()
         }
         #if os(iOS)
         // sheet temporarily removed for bisect
@@ -528,7 +532,11 @@ struct ImageFileView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: url) {
-            let loadRequest = loadRequestGate.begin(for: url)
+            // Same hazard as the text editor: an abandoned `.task` still runs its body, so it must
+            // not be able to claim the load and strand the live one on "Loading image…".
+            guard let loadRequest = loadRequestGate.begin(for: url, isCancelled: Task.isCancelled) else {
+                return
+            }
             didFinishLoading = false
             image = nil
             let loaded = await VaultImageLoader.image(
