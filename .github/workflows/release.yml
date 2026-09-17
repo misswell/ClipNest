@@ -148,6 +148,14 @@ jobs:
           echo "--- identities visible through the search list ---"
           security find-identity -v -p codesigning
 
+          # A keychain is only unlocked for the session that unlocked it, so the state
+          # set up here does not survive into the step that actually signs. Hand the
+          # details over so that step can unlock again for itself.
+          {
+            echo "CLIPNEST_KEYCHAIN_PATH=$keychain_path"
+            echo "CLIPNEST_KEYCHAIN_PASSWORD=$keychain_password"
+          } >> "$GITHUB_ENV"
+
       - name: Build, sign, notarize, staple, and verify
         shell: bash
         run: |
@@ -155,6 +163,19 @@ jobs:
           export CLIPNEST_OUTPUT_DIR="$RUNNER_TEMP/clipnest-release"
           mkdir -p "$CLIPNEST_OUTPUT_DIR"
           echo "CLIPNEST_OUTPUT_DIR=$CLIPNEST_OUTPUT_DIR" >> "$GITHUB_ENV"
+
+          # Unlock here rather than relying on the import step: unlocking does not carry
+          # across steps, and codesign reports a locked keychain as "The specified item
+          # could not be found in the keychain", which reads like a missing certificate.
+          keychain_path="$CLIPNEST_KEYCHAIN_PATH"
+          keychain_password="$CLIPNEST_KEYCHAIN_PASSWORD"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          existing="$(security list-keychains -d user | sed 's/^[[:space:]]*//; s/"//g')"
+          # shellcheck disable=SC2086
+          security list-keychains -d user -s "$keychain_path" $existing
+          security default-keychain -s "$keychain_path"
+          security find-identity -v -p codesigning "$keychain_path"
 
           CLIPNEST_DEVELOPER_ID="$APPLE_DEVELOPER_ID" \
           CLIPNEST_DEVELOPER_TEAM_ID="$APPLE_TEAM_ID" \

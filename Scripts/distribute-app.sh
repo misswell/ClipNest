@@ -79,6 +79,12 @@ echo "==> Signing with $SIGN_IDENTITY"
 ENTITLEMENTS="$ROOT/Sources/MarkdownVault.entitlements"
 [[ -f "$ENTITLEMENTS" ]] || { echo "Missing entitlements at $ENTITLEMENTS" >&2; exit 1; }
 
+# Signing happens after a long compile, so report what is actually reachable now. A
+# locked keychain surfaces from codesign as "The specified item could not be found in
+# the keychain", which reads like a missing certificate; this makes the real cause plain.
+echo "--- identities visible while signing ---"
+security find-identity -v -p codesigning || true
+
 # Inside out: embedded code must be sealed before the bundle that contains it, otherwise
 # the outer signature is computed over unsigned nested binaries. Today the main executable
 # is the only Mach-O in the bundle, so this loop is a no-op, but a future dependency can
