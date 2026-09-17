@@ -56,7 +56,7 @@ echo "==> Building ClipNest $VERSION ($ARCHS_WANTED)"
 # com.apple.security.get-task-allow, which the notary service rejects.
 xcodebuild -project ClipNest.xcodeproj -scheme ClipNest \
     -configuration Release -destination 'platform=macOS' \
-    -derivedDataPath "$DERIVED" -skipPackagePluginValidation \
+    -derivedDataPath "$DERIVED" -skipPackagePluginValidation -skipMacroValidation \
     ARCHS="$ARCHS_WANTED" ONLY_ACTIVE_ARCH=NO \
     DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual \
     CODE_SIGN_IDENTITY="$SIGN_IDENTITY" PROVISIONING_PROFILE_SPECIFIER= \
