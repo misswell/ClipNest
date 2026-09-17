@@ -114,8 +114,12 @@ jobs:
           keychain_password="$(openssl rand -hex 32)"
           certificate_path="$RUNNER_TEMP/clipnest-developer-id.p12"
 
+          # Only the exported copy of the certificate is removed on exit. The keychain
+          # itself must outlive this step: the signing happens in a later step, and
+          # deleting it here is precisely why every certificate lookup after this point
+          # failed while find-identity *inside* this step kept succeeding. A dedicated
+          # step at the end of the job removes it.
           cleanup() {
-            security delete-keychain "$keychain_path" >/dev/null 2>&1 || true
             rm -f "$certificate_path"
           }
           trap cleanup EXIT
@@ -226,3 +230,12 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "ClipNest $RELEASE_VERSION" \
             --generate-notes
+
+      - name: Remove signing keychain
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${CLIPNEST_KEYCHAIN_PATH:-}" ]]; then
+            security delete-keychain "$CLIPNEST_KEYCHAIN_PATH" >/dev/null 2>&1 || true
+          fi
