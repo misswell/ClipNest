@@ -102,7 +102,7 @@ jobs:
           xcodebuild test -project ClipNest.xcodeproj -scheme ClipNest \
             -destination 'platform=macOS' -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/clipnest-tests" \
-            -skipPackagePluginValidation \
+            -skipPackagePluginValidation -skipMacroValidation \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" \
             DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
 
