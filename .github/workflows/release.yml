@@ -135,8 +135,18 @@ jobs:
             -s \
             -k "$keychain_password" \
             "$keychain_path" >/dev/null
-          security list-keychains -d user -s "$keychain_path"
-          security find-identity -v -p codesigning "$keychain_path"
+          # Keep the runner's own keychains in the search list and make the signing
+          # keychain the default. Replacing the list outright left xcodebuild unable to
+          # resolve the identity even though `find-identity <path>` reported it: that
+          # call passes the keychain explicitly, so it never exercised the search list.
+          existing="$(security list-keychains -d user | sed 's/^[[:space:]]*//; s/"//g')"
+          # shellcheck disable=SC2086
+          security list-keychains -d user -s "$keychain_path" $existing
+          security default-keychain -s "$keychain_path"
+
+          # The real check: no explicit keychain, so this only sees the search list.
+          echo "--- identities visible through the search list ---"
+          security find-identity -v -p codesigning
 
       - name: Build, sign, notarize, staple, and verify
         shell: bash
