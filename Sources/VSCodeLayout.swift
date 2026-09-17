@@ -75,22 +75,7 @@ struct VSCodeLayout: View {
         .background(WindowAccessor())
         .ignoresSafeArea(.container, edges: .top)
         .preferredColorScheme(.dark)
-        .overlay {
-            if showQuickOpen {
-                QuickOpenPalette(isPresented: $showQuickOpen,
-                                 onOpen: { url in
-                                     selection.fileURL = url
-                                 },
-                                 onSearchAll: { query in
-                                     // Hand the query to the full side bar, which keeps the
-                                     // chosen search mode visible while browsing results.
-                                     search.query = query
-                                     activity = .search
-                                     sidebarVisible = true
-                                     showQuickOpen = false
-                                 })
-            }
-        }
+        .overlay { quickOpenOverlay }
         .task { store.restoreVaultIfNeeded() }
         .task { AppIconManager.applyStoredMacIcon() }
         // Bridge the "Open Vault Folder…" command / sidebar button to a native folder picker.
@@ -105,34 +90,22 @@ struct VSCodeLayout: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.refresh()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleTerminal)) { _ in
-            terminalVisible.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleSidebar)) { _ in
-            sidebarVisible.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .newTerminal)) { _ in
-            terminalVisible = true
-            terminals.newTerminal(directory: store.rootURL?.path ?? NSHomeDirectory())
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openTerminalAt)) { note in
-            if let path = note.object as? String {
+        .modifier(DesktopNotificationBridges(
+            onToggleTerminal: { terminalVisible.toggle() },
+            onToggleSidebar: { sidebarVisible.toggle() },
+            onNewTerminal: {
+                terminalVisible = true
+                terminals.newTerminal(directory: store.rootURL?.path ?? NSHomeDirectory())
+            },
+            onOpenTerminalAt: { path in
                 terminalVisible = true
                 terminals.newTerminal(directory: path)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .quickOpen)) { _ in
-            showQuickOpen = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .quickPasteCapture)) { _ in
-            captureClipboard()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .importImageCapture)) { _ in
-            presentImageImporter()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openExtension)) { note in
-            activeExtension = note.object as? String
-        }
+            },
+            onQuickOpen: { showQuickOpen = true },
+            onQuickPaste: { captureClipboard() },
+            onImportImage: { presentImageImporter() },
+            onOpenExtension: { activeExtension = $0 }
+        ))
         .onChange(of: selection.fileURL) { _, url in openTab(url) }
         .onChange(of: store.lastDocumentMove) { _, move in
             guard let move else { return }
@@ -292,6 +265,26 @@ struct VSCodeLayout: View {
         .overlay(alignment: .trailing) { Divider().overlay(VSCode.border) }
         .contentShape(Rectangle())
         .onTapGesture { selection.fileURL = url }
+    }
+
+    /// Extracted from `body` for the same type-checker reason as `DesktopNotificationBridges`:
+    /// this palette's two closures were among the heaviest sub-expressions in the chain.
+    @ViewBuilder
+    private var quickOpenOverlay: some View {
+        if showQuickOpen {
+            QuickOpenPalette(isPresented: $showQuickOpen,
+                             onOpen: { url in
+                                 selection.fileURL = url
+                             },
+                             onSearchAll: { query in
+                                 // Hand the query to the full side bar, which keeps the
+                                 // chosen search mode visible while browsing results.
+                                 search.query = query
+                                 activity = .search
+                                 sidebarVisible = true
+                                 showQuickOpen = false
+                             })
+        }
     }
 
     /// VS Code-style title bar: traffic-light gap · centered command/search bar · layout toggles.
@@ -801,6 +794,52 @@ struct IdentifiedString: Identifiable {
     let value: String
     var id: String { value }
     init(_ value: String) { self.value = value }
+}
+
+/// The notification bridges the desktop shell listens to, lifted out of `body`.
+///
+/// This is not only tidiness. `body` is already a long chain of modifiers, and adding the two
+/// capture bridges to it made CI's compiler give up with "unable to type-check this expression in
+/// reasonable time" — a newer local Xcode accepted the same code, so the failure was invisible
+/// here. Collecting every bridge into one modifier leaves `body` with fewer modifiers than it had
+/// before the capture buttons existed, which is what makes the fix safe rather than hopeful.
+private struct DesktopNotificationBridges: ViewModifier {
+    let onToggleTerminal: () -> Void
+    let onToggleSidebar: () -> Void
+    let onNewTerminal: () -> Void
+    let onOpenTerminalAt: (String) -> Void
+    let onQuickOpen: () -> Void
+    let onQuickPaste: () -> Void
+    let onImportImage: () -> Void
+    let onOpenExtension: (String?) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .toggleTerminal)) { _ in
+                onToggleTerminal()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleSidebar)) { _ in
+                onToggleSidebar()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .newTerminal)) { _ in
+                onNewTerminal()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openTerminalAt)) { note in
+                if let path = note.object as? String { onOpenTerminalAt(path) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .quickOpen)) { _ in
+                onQuickOpen()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .quickPasteCapture)) { _ in
+                onQuickPaste()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .importImageCapture)) { _ in
+                onImportImage()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openExtension)) { note in
+                onOpenExtension(note.object as? String)
+            }
+    }
 }
 
 extension Notification.Name {
