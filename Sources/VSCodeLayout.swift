@@ -9,6 +9,7 @@ struct VSCodeLayout: View {
     @EnvironmentObject private var selection: VaultSelection
     /// Vault-wide search, so the top bar's palette can surface content hits, not just names.
     @EnvironmentObject var search: LocalSearchController
+    @EnvironmentObject private var captureCoordinator: CaptureCoordinator
     @StateObject private var terminals = TerminalController()
 
     @State private var activity: ActivityItem = .explorer
@@ -21,6 +22,7 @@ struct VSCodeLayout: View {
     @State private var dragStartTerminal: CGFloat?
 
     @State private var showSettings = false
+    @State private var showImageImporter = false
     @AppStorage(EditorMode.persistenceKey) private var storedEditorMode = EditorMode.edit.rawValue
     @State private var showQuickOpen = false
     @State private var activeExtension: String?
@@ -122,6 +124,12 @@ struct VSCodeLayout: View {
         .onReceive(NotificationCenter.default.publisher(for: .quickOpen)) { _ in
             showQuickOpen = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .quickPasteCapture)) { _ in
+            captureClipboard()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .importImageCapture)) { _ in
+            presentImageImporter()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openExtension)) { note in
             activeExtension = note.object as? String
         }
@@ -134,6 +142,12 @@ struct VSCodeLayout: View {
             if !multi { openTabs = selection.fileURL.map { [$0] } ?? [] }
         }
         .sheet(isPresented: $showSettings) { sheet { SettingsView() } }
+        // The Mac counterpart of the phone's photo-library button. `PHPickerViewController` is
+        // iOS-only, so the desktop picks an image file and feeds the same capture path.
+        .fileImporter(isPresented: $showImageImporter, allowedContentTypes: [.image]) { result in
+            guard case let .success(url) = result else { return }
+            Task { await captureCoordinator.captureImportedImage(at: url) }
+        }
         .sheet(item: Binding(get: { activeExtension.map { IdentifiedString($0) } },
                              set: { activeExtension = $0?.value })) { item in
             switch item.value {
@@ -287,12 +301,62 @@ struct VSCodeLayout: View {
             Spacer(minLength: 8)
             commandCenter
             Spacer(minLength: 8)
+            captureButtons
+            Rectangle().fill(VSCode.border).frame(width: 1, height: 18)
             layoutToggleButtons
         }
         .padding(.horizontal, 8)
         .frame(height: 38)
         .background(VSCode.activityBg)
         .overlay(alignment: .bottom) { Rectangle().fill(VSCode.border).frame(height: 1) }
+    }
+
+    /// The phone's two capture affordances — paste the clipboard, or bring in a picture — which
+    /// the desktop previously only exposed as a row inside Settings. They sit in the title bar
+    /// because that is the one strip the desktop always shows, where iOS has a navigation bar and
+    /// a floating button to hang them on.
+    private var captureButtons: some View {
+        HStack(spacing: 2) {
+            Button(action: captureClipboard) {
+                if captureCoordinator.isProcessing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 30, height: 24)
+                } else {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 14))
+                        .foregroundStyle(VSCode.muted)
+                        .frame(width: 30, height: 24)
+                        .contentShape(Rectangle())
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(captureCoordinator.isProcessing)
+            .help("Quick Paste — organize the current clipboard (⌘⇧V)")
+            .accessibilityLabel("Quick Paste")
+
+            Button(action: presentImageImporter) {
+                Image(systemName: "photo.on.rectangle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(VSCode.muted)
+                    .frame(width: 30, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(captureCoordinator.isProcessing)
+            .help("Import Image — organize the text in a picture (⌘⇧I)")
+            .accessibilityLabel("Import Image")
+        }
+    }
+
+    private func captureClipboard() {
+        guard !captureCoordinator.isProcessing else { return }
+        Task { await captureCoordinator.reprocessClipboard() }
+    }
+
+    private func presentImageImporter() {
+        guard !captureCoordinator.isProcessing else { return }
+        showImageImporter = true
     }
 
     private var commandCenter: some View {
@@ -744,5 +808,9 @@ extension Notification.Name {
     static let toggleSidebar = Notification.Name("toggleSidebar")
     static let newTerminal = Notification.Name("newTerminal")
     static let quickOpen = Notification.Name("quickOpen")
+    /// Capture the current clipboard, and bring in a picture. Wired from the Capture menu so
+    /// the menu items and the title-bar buttons drive one code path.
+    static let quickPasteCapture = Notification.Name("quickPasteCapture")
+    static let importImageCapture = Notification.Name("importImageCapture")
 }
 #endif

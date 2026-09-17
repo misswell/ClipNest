@@ -51,6 +51,16 @@ struct MarkdownVaultApp: App {
                 }
                 .keyboardShortcut("`", modifiers: [.control])
             }
+            CommandMenu("Capture") {
+                Button("Quick Paste") {
+                    NotificationCenter.default.post(name: .quickPasteCapture, object: nil)
+                }
+                .keyboardShortcut("v", modifiers: [.command, .shift])
+                Button("Import Image…") {
+                    NotificationCenter.default.post(name: .importImageCapture, object: nil)
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
+            }
             CommandGroup(after: .sidebar) {
                 Button("Toggle Side Bar") {
                     NotificationCenter.default.post(name: .toggleSidebar, object: nil)

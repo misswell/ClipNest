@@ -452,6 +452,27 @@ final class CaptureCoordinator: ObservableObject {
         await generateAndSave(snapshot)
     }
 
+    /// Records an image the user chose from disk.
+    ///
+    /// This is the Mac counterpart of the phone's photo library: iOS hands the pipeline a
+    /// `PlatformImage` straight from `PHPickerViewController`, which has no Mac equivalent, so
+    /// the desktop picks a file instead and lands on the same `capturePhoto` entry point.
+    ///
+    /// The read here is deliberately not routed through `VaultFileAccess`: that actor exists to
+    /// coordinate iCloud placeholders and coordinated access to *vault* bytes, and this file is
+    /// outside the vault, chosen by the user through a system panel that already grants access.
+    func captureImportedImage(at url: URL) async {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        guard let data = try? Data(contentsOf: url),
+              let image = PlatformImage(data: data) else {
+            errorMessage = String(localized: "That file could not be opened as an image.")
+            return
+        }
+        await capturePhoto(image)
+    }
+
     /// Records a photo: recognize its text on device and organize it into a note.
     /// Cross-platform — the Mac path uses the same Vision code as the phone.
     func capturePhoto(_ image: PlatformImage) async {

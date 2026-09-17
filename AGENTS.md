@@ -77,8 +77,11 @@ extension): immutable `raw/`, LLM-owned `wiki/`, wikilinks, append-only `wiki/lo
 ## macOS UI architecture (`#if os(macOS)`)
 
 - `RootView` → `VSCodeLayout` (macOS) or a `TabView` (iOS).
-- `VSCodeLayout` composes: top bar (command/search + layout toggles) · `ActivityBar`
-  (Explorer/Search/Extensions + iCloud account + Settings) · side bar · `EditorPane` · `TerminalPanel`.
+- `VSCodeLayout` composes: top bar (command/search + capture actions + layout toggles) ·
+  `ActivityBar` (Explorer/Search/Extensions + iCloud account + Settings) · side bar · `EditorPane`
+  · `TerminalPanel`. The title bar carries **Quick Paste** (⌘⇧V) and **Import Image** (⌘⇧I), the
+  desktop counterparts of the phone's floating paste button and photo-library picker — macOS has no
+  `PHPickerViewController`, so importing picks an image file and joins the same `capturePhoto` path.
   Side bar and terminal widths are drag-resizable; both are collapsible.
 - `VaultStore` owns the open folder (security-scoped/plain bookmark), the file tree, and CRUD.
 - **`Sources/Storage/` is the only place that touches vault bytes.** `VaultFileAccess` (an actor)
