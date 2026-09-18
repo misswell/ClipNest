@@ -28,6 +28,9 @@ struct VSCodeLayout: View {
     @State private var activeExtension: String?
     @AppStorage("editor.multipleTabs") private var multipleTabs = true
     @State private var openTabs: [URL] = []
+    @State private var showDeleteConfirmation = false
+    @State private var showNewFileAlert = false
+    @State private var newFileName = "Untitled.md"
 
     private var editorMode: Binding<EditorMode> {
         Binding(
@@ -139,6 +142,7 @@ struct VSCodeLayout: View {
     private var sidebar: some View {
         switch activity {
         case .explorer:   ExplorerSidebar(selection: selection)
+        case .timeline:   TimelineSidebar()
         case .search:     SearchSidebar()
         case .extensions: ExtensionsSidebar()
         }
@@ -210,15 +214,37 @@ struct VSCodeLayout: View {
                     } else if node.isImage {
                         ImageFileView(url: url)
                     } else {
-                        welcome
+                        unsupportedFile(url)
                     }
                 } else {
-                    welcome
+                    HomeWelcomeView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(VSCode.editorBg)
+        // "Delete Note" from the tab bar's document menu (iOS parity): confirm, then trash.
+        .alert("Delete Note", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                if let url = selection.fileURL { store.delete(url) }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(selection.fileURL.map { "Move “\($0.lastPathComponent)” to the trash?" } ?? "")
+        }
+        // The ⌘N "New Markdown File" command (and the start page chip) both land here.
+        // iOS names the file in an alert before creating; keep the same flow.
+        .onChange(of: store.newFileRequested) { _, requested in
+            guard requested else { return }
+            store.newFileRequested = false
+            newFileName = "Untitled.md"
+            showNewFileAlert = true
+        }
+        .alert("New Markdown File", isPresented: $showNewFileAlert) {
+            TextField("name.md", text: $newFileName)
+            Button("Create") { store.createFile(named: newFileName) }
+            Button("Cancel", role: .cancel) { }
+        }
     }
 
     @ViewBuilder
@@ -235,12 +261,40 @@ struct VSCodeLayout: View {
                 }
             }
             Spacer(minLength: 8)
-            if isEditable {
-                ModeToggle(mode: editorMode).padding(.trailing, 10)
+            HStack(spacing: 6) {
+                if isEditable {
+                    ModeToggle(mode: editorMode)
+                }
+                if let url = selection.fileURL {
+                    documentActionsMenu(url)
+                }
             }
+            .padding(.trailing, 10)
         }
         .frame(height: 35)
         .background(VSCode.tabBarBg)
+    }
+
+    /// Document actions for the file open in the editor — the desktop counterpart of the
+    /// phone's editor "…" menu. Deleting confirms first, like on iOS.
+    private func documentActionsMenu(_ url: URL) -> some View {
+        Menu {
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+            Divider()
+            Button("Delete Note", role: .destructive) { showDeleteConfirmation = true }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 12))
+                .foregroundStyle(VSCode.muted)
+                .frame(width: 24, height: 22)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Document actions")
     }
 
     private func editorTab(_ url: URL) -> some View {
@@ -261,7 +315,7 @@ struct VSCodeLayout: View {
         .padding(.horizontal, 12)
         .frame(height: 35)
         .background(active ? VSCode.tabActiveBg : Color.clear)
-        .overlay(alignment: .top) { Rectangle().fill(active ? VSCode.accent : Color.clear).frame(height: 1) }
+        .overlay(alignment: .top) { Rectangle().fill(active ? VSCode.accent : Color.clear).frame(height: 2) }
         .overlay(alignment: .trailing) { Divider().overlay(VSCode.border) }
         .contentShape(Rectangle())
         .onTapGesture { selection.fileURL = url }
@@ -399,47 +453,55 @@ struct VSCodeLayout: View {
         terminalVisible.toggle()
     }
 
-    private var welcome: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 56)).foregroundStyle(VSCode.muted.opacity(0.4))
-            Text("Select a file in the Explorer to start editing")
-                .font(.system(size: 13)).foregroundStyle(VSCode.muted)
-            shortcut("Toggle Terminal", "⌃`")
-            shortcut("Toggle Side Bar", "⌘B")
-            shortcut("New Terminal", "⌃⇧`")
+    /// A file the editor can't open (neither Markdown/text nor an image). Names it instead
+    /// of silently falling back to the start page.
+    private func unsupportedFile(_ url: URL) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "questionmark.folder")
+                .font(.system(size: 44)).foregroundStyle(VSCode.muted.opacity(0.5))
+            Text(url.lastPathComponent)
+                .font(.system(size: 14, weight: .semibold)).foregroundStyle(VSCode.fg)
+            Text("This file type can't be shown in the editor. Use Reveal in Finder in the Explorer.")
+                .font(.system(size: 12)).foregroundStyle(VSCode.muted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(VSCode.editorBg)
     }
 
-    private func shortcut(_ name: String, _ keys: String) -> some View {
-        HStack(spacing: 12) {
-            Text(name).font(.system(size: 12)).foregroundStyle(VSCode.muted)
-            Text(keys).font(.system(size: 12, design: .monospaced)).foregroundStyle(VSCode.fg)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(VSCode.hoverBg, in: RoundedRectangle(cornerRadius: 4))
-        }
-    }
-
     // MARK: - Status bar
     private var statusBar: some View {
-        HStack(spacing: 12) {
-            Label(store.vaultName, systemImage: "folder")
-                .font(.system(size: 11)).foregroundStyle(.white)
+        HStack(spacing: 10) {
+            Circle().fill(Theme.primary).frame(width: 6, height: 6)
+            Text(store.vaultName)
+                .font(.system(size: 11)).foregroundStyle(VSCode.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
             Spacer()
             Button {
                 terminalVisible = true
                 terminals.newTerminal(directory: store.rootURL?.path ?? NSHomeDirectory())
             } label: {
-                Label("Terminal", systemImage: "terminal").font(.system(size: 11)).foregroundStyle(.white)
+                HStack(spacing: 4) {
+                    Image(systemName: "terminal")
+                    Text("Terminal")
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(VSCode.muted)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(VSCode.hoverBg, in: RoundedRectangle(cornerRadius: 4))
+                .contentShape(RoundedRectangle(cornerRadius: 4))
             }
             .buttonStyle(.plain)
-            Text("Markdown").font(.system(size: 11)).foregroundStyle(.white)
+            .help("New Terminal (⌃⇧`)")
+            Text("Markdown").font(.system(size: 11)).foregroundStyle(VSCode.muted)
         }
         .padding(.horizontal, 10)
-        .frame(height: 22)
-        .background(VSCode.accent)
+        .frame(height: 24)
+        .background(VSCode.statusBarBg)
+        .overlay(alignment: .top) { Rectangle().fill(VSCode.border).frame(height: 1) }
     }
 
     @ViewBuilder
@@ -602,9 +664,9 @@ private struct QuickOpenPalette: View {
                 }
             }
             .frame(width: 560)
-            .background(Color(hex: 0x252526), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(VSCode.border))
-            .shadow(radius: 24, y: 8)
+            .background(VSCode.overlayBg, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(VSCode.border))
+            .shadow(color: .black.opacity(0.45), radius: 24, y: 8)
             .padding(.top, 52)
         }
         .onAppear { focused = true }
@@ -690,7 +752,7 @@ private struct SearchSidebar: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .padding(6)
-                .background(Color(hex: 0x3C3C3C), in: RoundedRectangle(cornerRadius: 4))
+                .background(VSCode.fieldBg, in: RoundedRectangle(cornerRadius: 6))
                 .padding(.horizontal, 8)
                 .padding(.top, 8)
 

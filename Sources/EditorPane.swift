@@ -221,8 +221,8 @@ struct ModeToggle: View {
                 .help(m.rawValue)
             }
         }
-        .background(Color(hex: 0x2A2A2A), in: RoundedRectangle(cornerRadius: 5))
-        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(VSCode.border))
+        .background(VSCode.hoverBg, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(VSCode.border))
     }
 }
 #endif

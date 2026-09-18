@@ -4,12 +4,13 @@ import AppKit
 
 /// The sections selectable from the activity bar that drive the side bar content.
 enum ActivityItem: String, CaseIterable, Identifiable {
-    case explorer, search, extensions
+    case explorer, timeline, search, extensions
     var id: String { rawValue }
 
     var icon: String {
         switch self {
         case .explorer:   return "doc.on.doc"
+        case .timeline:   return "clock"
         case .search:     return "magnifyingglass"
         case .extensions: return "square.grid.2x2"
         }
@@ -17,6 +18,7 @@ enum ActivityItem: String, CaseIterable, Identifiable {
     var help: String {
         switch self {
         case .explorer:   return String(localized: "Explorer")
+        case .timeline:   return String(localized: "Timeline")
         case .search:     return String(localized: "Search")
         case .extensions: return String(localized: "Extensions")
         }

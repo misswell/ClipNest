@@ -101,7 +101,7 @@ struct ExtensionsSidebar: View {
             Divider().overlay(VSCode.border)
             TextField("Search Extensions in Marketplace", text: $query)
                 .textFieldStyle(.plain).font(.system(size: 12)).padding(6)
-                .background(Color(hex: 0x3C3C3C), in: RoundedRectangle(cornerRadius: 4))
+                .background(VSCode.fieldBg, in: RoundedRectangle(cornerRadius: 6))
                 .padding(8)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -165,7 +165,7 @@ private struct ExtensionRow: View {
             Text(title).font(.system(size: 11, weight: .medium))
                 .foregroundStyle(prominent ? .white : VSCode.fg)
                 .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(prominent ? VSCode.accent : Color(hex: 0x3C3C3C), in: RoundedRectangle(cornerRadius: 4))
+                .background(prominent ? VSCode.accent : VSCode.fieldBg, in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
     }

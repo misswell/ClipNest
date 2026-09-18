@@ -18,6 +18,7 @@ struct ExplorerSidebar: View {
     @State private var renameTarget: URL?
     @State private var renameText = ""
     @State private var moveTarget: MoveDocumentTarget?
+    @State private var showTrash = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -50,6 +51,12 @@ struct ExplorerSidebar: View {
             MoveDocumentView(fileURL: target.url) { moveTarget = nil }
                 .environmentObject(store)
         }
+        // The iPhone reaches Trash through the Settings tab; on the desktop it was only
+        // reachable from the settings sheet, so give the Explorer menu a direct entry too.
+        .sheet(isPresented: $showTrash) {
+            TrashView()
+                .frame(minWidth: 480, minHeight: 420)
+        }
     }
 
     // MARK: - Header
@@ -80,6 +87,8 @@ struct ExplorerSidebar: View {
                 Button("Open Vault…") { store.requestOpenVault() }
                 Button("Refresh") { store.refresh() }
                 Button("Collapse All") { expanded = store.rootURL.map { [$0] } ?? [] }
+                Divider()
+                Button("Show Trash…") { showTrash = true }
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 12))
@@ -152,6 +161,8 @@ struct ExplorerSidebar: View {
             Text("You have not opened a vault.")
                 .font(.system(size: 12)).foregroundStyle(VSCode.muted)
             Button("Open Vault") { store.requestOpenVault() }
+                .controlSize(.small)
+            Button("Open Sample Vault") { store.openSampleVault() }
                 .controlSize(.small)
         }
         .padding(12)
