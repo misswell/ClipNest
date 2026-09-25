@@ -35,5 +35,7 @@ __pycache__/
 
 # Distribution artifacts
 dist/
-.asc/artifacts/
-.asc/signing/
+
+# Local App Store Connect tooling (signing, archives, ipas, screenshot-pipeline
+# derived data, machine-specific settings) — never publish
+.asc/

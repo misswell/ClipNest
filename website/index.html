@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#15151b">
+  <meta name="description" content="ClipNest quickly pastes clipboard content, uses AI to sort it into the right notebook, and keeps the same Markdown files ready for Obsidian.">
+  <meta property="og:title" content="ClipNest — Quick Paste. AI sorting. Obsidian-ready.">
+  <meta property="og:description" content="Bring clipboard content in with Quick Paste, let AI classify it into a notebook, then keep working with the same Markdown content in Obsidian.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://clipnest.liuguofeng.com/">
+  <link rel="icon" type="image/png" href="assets/clipnest-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <title>ClipNest — Quick Paste for your Obsidian vault</title>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <div class="site-shell">
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="ClipNest home">
+        <span class="brand-mark"><img src="assets/clipnest-icon.png" alt=""></span>
+        <span class="brand-name">ClipNest</span>
+      </a>
+
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+        <span class="menu-label">Menu</span>
+        <span class="menu-icon" aria-hidden="true"><i></i><i></i></span>
+      </button>
+
+      <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+        <a href="#how-it-works">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#platforms">Platforms</a>
+        <a class="nav-link-arrow" href="https://github.com/misswell/ClipNest" target="_blank" rel="noreferrer">View on GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy reveal">
+          <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> QUICK PASTE · AI NOTE SORTING · OBSIDIAN</p>
+          <h1 id="hero-title">Quick Paste.<br><em>AI sorts the rest.</em></h1>
+          <p class="hero-description">Quick Paste brings in your clipboard, AI sorts it into the right notebook, and you can keep working with the same content directly in Obsidian.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#how-it-works">See the workflow <span aria-hidden="true">↓</span></a>
+            <a class="button button-quiet" href="https://github.com/misswell/ClipNest" target="_blank" rel="noreferrer">Explore the source <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="hero-meta" aria-label="Supported platforms and file format">
+            <span>Quick Paste</span><i aria-hidden="true"></i><span>AI notebooks</span><i aria-hidden="true"></i><span>Obsidian-ready</span>
+            <b>·</b><span>plain <code>.md</code> files</span>
+          </div>
+        </div>
+
+        <figure class="hero-product reveal reveal-delay">
+          <div class="hero-glow" aria-hidden="true"></div>
+          <div class="product-window">
+            <div class="window-bar">
+              <span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="window-title"><span class="status-pulse" aria-hidden="true"></span> ClipNest / workspace</span>
+              <span class="window-command" aria-hidden="true">⌘ K</span>
+            </div>
+            <img src="assets/clipnest-mac.png" alt="ClipNest desktop workspace with a Markdown file tree, editor, preview, and terminal">
+          </div>
+          <figcaption><span>01</span><span>Paste once. Keep working in the vault you already use.</span></figcaption>
+        </figure>
+      </section>
+
+      <section class="signal-band" aria-label="ClipNest workflow">
+        <div class="band-label">THE FAST PATH</div>
+        <div class="signal-line"><span>PASTE</span><b aria-hidden="true">→</b><span>CLASSIFY</span><b aria-hidden="true">→</b><span>OPEN</span></div>
+        <p>One shortcut from clipboard to the notebook where it belongs.</p>
+      </section>
+
+      <section class="section steps-section" id="how-it-works" aria-labelledby="steps-title">
+        <div class="section-heading reveal">
+          <p class="eyebrow eyebrow-dark">FROM CLIPBOARD TO NOTEBOOK</p>
+          <h2 id="steps-title">One quick paste.<br>A notebook that knows where it belongs.</h2>
+          <p>ClipNest keeps the handoff short: capture the clipboard, let AI file the note, then open the same content in Obsidian.</p>
+        </div>
+
+        <div class="step-grid">
+          <article class="step-card step-card-violet reveal">
+            <div class="step-top"><span>01</span><span class="step-symbol" aria-hidden="true">⌘</span></div>
+            <h3>Quick Paste from anywhere.</h3>
+            <p>Paste an article, a thread, a quote, a URL, or a snippet into ClipNest without breaking your flow.</p>
+            <div class="sample-chip"><span>⌘</span> Quick Paste</div>
+          </article>
+
+          <article class="step-card step-card-acid reveal reveal-delay-short">
+            <div class="step-top"><span>02</span><span class="step-symbol" aria-hidden="true">✦</span></div>
+            <h3>AI sorts it into a notebook.</h3>
+            <p>AI creates a title, summary, tags, and classification, then routes the note to the notebook/category it belongs in.</p>
+            <div class="sample-chip"><span>✦</span> Notebook · tags · summary</div>
+          </article>
+
+          <article class="step-card step-card-orange reveal reveal-delay">
+            <div class="step-top"><span>03</span><span class="step-symbol" aria-hidden="true">↗</span></div>
+            <h3>Open it directly in Obsidian.</h3>
+            <p>The same plain Markdown files stay in your vault, so you can open the folder in Obsidian and keep editing the content there.</p>
+            <div class="sample-chip"><span>↗</span> Obsidian / Notes.md</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section feature-section" id="features" aria-labelledby="feature-title">
+        <div class="feature-copy reveal">
+          <p class="eyebrow eyebrow-dark">THE WORKSPACE, YOUR WAY</p>
+          <h2 id="feature-title">Your notes,<br>already in motion.</h2>
+          <p class="feature-lead">Quick Paste gets the clipboard into a note; the rest of the workspace stays ready for Obsidian.</p>
+
+          <div class="feature-list">
+            <div class="feature-item">
+              <span class="feature-index">01</span>
+              <div><h3>Edit · Split · Preview</h3><p>Move from source to rendered note without losing your place.</p></div>
+            </div>
+            <div class="feature-item">
+              <span class="feature-index">02</span>
+              <div><h3>Notebook routing</h3><p>Create, rename, and sort notes into folders.</p></div>
+            </div>
+            <div class="feature-item">
+              <span class="feature-index">03</span>
+              <div><h3>Obsidian, one step away</h3><p>Open the same vault content without export or conversion.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <figure class="phone-stage reveal reveal-delay">
+          <div class="phone-halo" aria-hidden="true"></div>
+          <div class="phone-frame">
+            <div class="phone-speaker" aria-hidden="true"></div>
+            <img src="assets/clipnest-iphone.png" alt="ClipNest on iPhone showing a rendered Markdown note">
+          </div>
+          <figcaption><span class="caption-marker"></span> A real note, rendered beautifully.</figcaption>
+        </figure>
+      </section>
+
+      <section class="platform-section" id="platforms" aria-labelledby="platform-title">
+        <div class="platform-copy reveal">
+          <p class="eyebrow eyebrow-light">ONE VAULT. THREE SCREENS.</p>
+          <h2 id="platform-title">Start on the move.<br><em>Finish at your desk.</em></h2>
+          <p>Quick Paste on iPhone, a roomier split view on iPad, and a full vault workspace on Mac — all working on the same files.</p>
+          <div class="platform-tags"><span>SwiftUI</span><span>iOS 17+</span><span>macOS 14+</span></div>
+        </div>
+
+        <figure class="tablet-stage reveal reveal-delay">
+          <div class="tablet-frame">
+            <div class="tablet-camera" aria-hidden="true"></div>
+            <img src="assets/clipnest-ipad.png" alt="ClipNest on iPad showing a split editor and Markdown preview">
+          </div>
+          <figcaption><span>iPad / Split view</span><span>Same note. More room to think.</span></figcaption>
+        </figure>
+      </section>
+
+      <section class="section compatibility-section" id="compatibility" aria-labelledby="compatibility-title">
+        <div class="compatibility-intro reveal">
+          <p class="eyebrow eyebrow-dark">THE IMPORTANT PART</p>
+          <h2 id="compatibility-title">Open the same<br>content in Obsidian.</h2>
+        </div>
+        <div class="compatibility-card reveal reveal-delay">
+          <div class="compatibility-card-top"><span class="compatibility-mark" aria-hidden="true">.md</span><span>portable by default</span></div>
+          <p>ClipNest reads and writes ordinary Markdown files and lets you work directly with the same vault Obsidian uses. No export. No duplicate copy.</p>
+          <div class="compatibility-bottom"><span>Quick Paste</span><span>Plain .md files</span><span>Obsidian-ready</span></div>
+        </div>
+      </section>
+
+      <section class="final-cta" id="download" aria-labelledby="cta-title">
+        <div class="cta-mark" aria-hidden="true"><img src="assets/clipnest-icon.png" alt=""></div>
+        <p class="eyebrow eyebrow-light">MAKE ROOM FOR THE NEXT GOOD IDEA</p>
+        <h2 id="cta-title">Paste fast.<br><em>Keep moving.</em></h2>
+        <p>From clipboard to notebook to Obsidian, ClipNest keeps the useful part of the workflow close at hand.</p>
+        <a class="button button-acid" href="https://github.com/misswell/ClipNest" target="_blank" rel="noreferrer">Follow the build on GitHub <span aria-hidden="true">↗</span></a>
+        <span class="cta-note">Quick Paste · AI notebooks · Obsidian · SwiftUI</span>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand brand-footer" href="#top" aria-label="Back to ClipNest home">
+        <span class="brand-mark"><img src="assets/clipnest-icon.png" alt=""></span>
+        <span class="brand-name">ClipNest</span>
+      </a>
+      <p>Clipboard in. Notes out.</p>
+      <div class="footer-links"><a href="/privacy.html">Privacy Policy</a><a href="https://github.com/misswell/ClipNest" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://www.liuguofeng.com/">More projects ↗</a></div>
+      <small>© 2026 Tertiary Infotech Academy Pte Ltd</small>
+    </footer>
+  </div>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
