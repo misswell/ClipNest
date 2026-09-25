@@ -58,7 +58,7 @@ final class ClipNestLogicTests: XCTestCase {
                        "iOS")
     }
 
-    func testMarkdownBuilderKeepsMetadataAndOriginalContent() {
+    func testMarkdownBuilderKeepsMetadataAndRendersTheSourceAsBody() {
         let content = ClipboardContent(text: "Swift actor protects shared state\nhttps://example.com")!
         let note = GeneratedNote(title: "Swift Actor / Safety",
                                  summary: "隔离共享可变状态。",
@@ -67,15 +67,25 @@ final class ClipNestLogicTests: XCTestCase {
                                  tags: ["Swift", "Concurrency"],
                                  sourceURL: nil)
 
+        // The shipping default: the body comes from the source, so the model's `content`
+        // stays unused and no `## 原始内容` quote duplicates the body.
         let markdown = MarkdownNoteBuilder.make(note: note,
                                                 originalContent: content,
+                                                format: .default,
                                                 date: Date(timeIntervalSince1970: 0))
 
         XCTAssertTrue(markdown.hasPrefix("---\n"))
         XCTAssertTrue(markdown.contains("source: clipboard"))
         XCTAssertTrue(markdown.contains("sourceURL: \"https://example.com\""))
         XCTAssertTrue(markdown.contains("# Swift Actor / Safety"))
-        XCTAssertTrue(markdown.contains("> Swift actor protects shared state"))
+        XCTAssertTrue(markdown.contains("## 摘要"))
+        XCTAssertTrue(markdown.contains("隔离共享可变状态。"))
+        XCTAssertTrue(markdown.contains("Swift actor protects shared state"),
+                      "the source is the body")
+        XCTAssertFalse(markdown.contains("Actor members are isolated"),
+                       "a format without an organized body ignores the model's content")
+        XCTAssertFalse(markdown.contains("## 原始内容"),
+                       "the source must not be quoted again when it already is the body")
     }
 
     func testPromptIncludesExistingCategoriesAndContent() {
@@ -299,8 +309,12 @@ final class ClipNestLogicTests: XCTestCase {
                                  category: "开发",
                                  tags: [],
                                  sourceURL: nil)
-        let first = try await store.saveGeneratedNote(note: note, originalContent: content)
-        let second = try await store.saveGeneratedNote(note: note, originalContent: content)
+        let first = try await store.saveGeneratedNote(note: note,
+                                                      captured: CapturedContent(text: content.rawText),
+                                                      format: .default)
+        let second = try await store.saveGeneratedNote(note: note,
+                                                       captured: CapturedContent(text: content.rawText),
+                                                       format: .default)
 
         XCTAssertNotEqual(first.lastPathComponent, second.lastPathComponent)
         let existingText = try String(contentsOf: existingURL, encoding: .utf8)
@@ -309,10 +323,9 @@ final class ClipNestLogicTests: XCTestCase {
         XCTAssertTrue(generatedText.contains("# Same Title"))
         XCTAssertTrue(generatedText.contains("## 摘要"))
         XCTAssertTrue(generatedText.contains("Summary"))
-        XCTAssertTrue(generatedText.contains("## 内容"))
-        XCTAssertTrue(generatedText.contains("Body"))
-        XCTAssertTrue(generatedText.contains("## 原始内容"))
-        XCTAssertTrue(generatedText.contains("> Original clipboard text"))
+        XCTAssertTrue(generatedText.contains("Original clipboard text"),
+                      "the source plays the body under the default format")
+        XCTAssertFalse(generatedText.contains("## 原始内容"))
         XCTAssertTrue(FileManager.default.fileExists(atPath: first.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: second.path))
         XCTAssertTrue(store.topLevelCategories().contains("开发"))

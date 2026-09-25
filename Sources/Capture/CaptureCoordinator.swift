@@ -112,7 +112,9 @@ final class CaptureCoordinator: ObservableObject {
 
     func saveDraft(_ draft: GeneratedNoteDraft) async {
         guard !isRunning else { return }
-        guard let originalContent = ClipboardContent(text: draft.originalText) else {
+        // An image-only draft is saveable even without text; a fully empty draft is not.
+        guard !draft.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !draft.images.isEmpty else {
             errorMessage = String(localized: "The original clipboard content is empty and cannot be saved.")
             state = .failed
             return
@@ -129,8 +131,12 @@ final class CaptureCoordinator: ObservableObject {
             var note = draft.note
             note.category = FileNameSanitizer.directoryName(from: draft.category,
                                                              fallback: ClassificationService.inbox)
+            // The format is re-read at save time so the preview always saves under what the
+            // Settings page says right now, and the attachments saved here are exactly the
+            // ones the preview offered to keep.
             let url = try await store.saveGeneratedNote(note: note,
-                                                         originalContent: originalContent)
+                                                        captured: draft.captured,
+                                                        format: NoteFormatConfigurationStore.load())
             markProcessed(draft.clipboardHash)
             lastSavedURL = url
             pendingDraft = nil
@@ -274,9 +280,12 @@ final class CaptureCoordinator: ObservableObject {
                                 rawText: snapshot.content.rawText,
                                 source: "capture")
 
+        // One format per capture: the same configuration reaches the prompt, the preview and
+        // the renderer (方案 §37).
+        let format = NoteFormatConfigurationStore.load()
         do {
-            let generated = try await generateNote(for: snapshot)
-            try await classifyAndSave(generated, snapshot: snapshot)
+            let generated = try await generateNote(for: snapshot, format: format)
+            try await classifyAndSave(generated, snapshot: snapshot, format: format)
         } catch is CancellationError {
             state = .idle
             statusMessage = ""
@@ -292,7 +301,8 @@ final class CaptureCoordinator: ObservableObject {
         }
     }
 
-    private func generateNote(for snapshot: ClipboardSnapshot) async throws -> GeneratedNote {
+    private func generateNote(for snapshot: ClipboardSnapshot,
+                              format: NoteFormatConfiguration) async throws -> GeneratedNote {
         state = .analyzing
         statusMessage = String(localized: "Analyzing content…")
         let categories = store.topLevelCategories()
@@ -305,7 +315,8 @@ final class CaptureCoordinator: ObservableObject {
             // The coordinator does not know whether this ends up in the downloaded local
             // model, Local Lite or the OpenAI-compatible provider — the router decides.
             ?? NoteGenerationRouter(configuration: configuration,
-                                    categoryProfiles: store.categoryProfiles())
+                                    categoryProfiles: store.categoryProfiles(),
+                                    format: format)
 
         defer { generationProgress = nil }
         return try await generate(using: generator,
@@ -389,7 +400,9 @@ final class CaptureCoordinator: ObservableObject {
         }
     }
 
-    private func classifyAndSave(_ generated: GeneratedNote, snapshot: ClipboardSnapshot) async throws {
+    private func classifyAndSave(_ generated: GeneratedNote,
+                                 snapshot: ClipboardSnapshot,
+                                 format: NoteFormatConfiguration) async throws {
         state = .classifying
         statusMessage = String(localized: "Classifying…")
         let finalCategories = store.topLevelCategories()
@@ -406,7 +419,7 @@ final class CaptureCoordinator: ObservableObject {
                 ?? ClipboardProcessingMode.automatic.rawValue
         ) ?? .automatic
         if mode == .confirmBeforeSave {
-            pendingDraft = GeneratedNoteDraft(note: note, snapshot: snapshot)
+            pendingDraft = GeneratedNoteDraft(note: note, snapshot: snapshot, format: format)
             isRunning = false
             state = .completed
             statusMessage = String(localized: "Note generated — confirm to save")
@@ -415,8 +428,13 @@ final class CaptureCoordinator: ObservableObject {
 
         state = .saving
         statusMessage = String(localized: "Saving to \(category)…")
+        let captured = CapturedContent(text: snapshot.content.rawText,
+                                       sourceURL: note.sourceURL ?? snapshot.content.sourceURL,
+                                       sourceKind: snapshot.sourceKind,
+                                       images: snapshot.images)
         let url = try await store.saveGeneratedNote(note: note,
-                                                     originalContent: snapshot.content)
+                                                     captured: captured,
+                                                     format: format)
         markProcessed(snapshot.hash)
         lastSavedURL = url
         state = .completed
@@ -461,6 +479,9 @@ final class CaptureCoordinator: ObservableObject {
     /// The read here is deliberately not routed through `VaultFileAccess`: that actor exists to
     /// coordinate iCloud placeholders and coordinated access to *vault* bytes, and this file is
     /// outside the vault, chosen by the user through a system panel that already grants access.
+    ///
+    /// The imported bytes are kept as-is for the attachment: re-encoding a screenshot or a
+    /// photo only loses fidelity (方案 §19).
     func captureImportedImage(at url: URL) async {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -470,25 +491,40 @@ final class CaptureCoordinator: ObservableObject {
             errorMessage = String(localized: "That file could not be opened as an image.")
             return
         }
-        await capturePhoto(image)
+        await capturePhoto(image, sourceImage: CapturedImage(data: data,
+                                                             preferredExtension: url.pathExtension))
     }
 
     /// Records a photo: recognize its text on device and organize it into a note.
     /// Cross-platform — the Mac path uses the same Vision code as the phone.
     func capturePhoto(_ image: PlatformImage) async {
+        await capturePhoto(image, sourceImage: nil)
+    }
+
+    private func capturePhoto(_ image: PlatformImage,
+                              sourceImage: CapturedImage?) async {
         guard !isRunning else { return }
         bannerTask?.cancel()
         isRunning = true
         errorMessage = nil
         showsStatusBanner = true
-        await finishPhotoCapture(image)
+        await finishPhotoCapture(image, sourceImage: sourceImage)
     }
 
-    private func finishPhotoCapture(_ image: PlatformImage) async {
+    private func finishPhotoCapture(_ image: PlatformImage,
+                                    sourceImage: CapturedImage?) async {
         state = .analyzing
         statusMessage = String(localized: "Recognizing text in photo…")
         let ocrResult = await recognizeText(in: image)
         let ocrText = OCRPostProcessor.process(ocrResult.text)
+
+        // The image travels with the capture all the way to the save transaction (方案 §21);
+        // whether it is *written* is decided by the format at save time. Photos taken in-app
+        // have no original bytes, so they are encoded once here; an imported file arrives
+        // with its own bytes and skips the re-encode.
+        let attachmentImage = sourceImage ?? Self.encodedAttachmentImage(from: image)
+        let sourceKind: CaptureSourceKind = sourceImage == nil ? .photo : .importedImage
+        let images = attachmentImage.map { [$0] } ?? []
 
         // A separate image model is only ever considered when the mode allows a network
         // request at all. In local mode the photo is read by Vision and nothing else.
@@ -507,7 +543,8 @@ final class CaptureCoordinator: ObservableObject {
                         imageData: jpegData,
                         ocrText: ocrText,
                         existingCategories: store.topLevelCategories(),
-                        preferredLanguage: configuration.text.preferredLanguage)
+                        preferredLanguage: configuration.text.preferredLanguage,
+                        format: NoteFormatConfigurationStore.load())
                     let anchorText = ocrText.isEmpty ? String(localized: "(photo)") : ocrText
                     guard let anchorContent = ClipboardContent(text: anchorText) else {
                         isRunning = false
@@ -516,10 +553,13 @@ final class CaptureCoordinator: ObservableObject {
                     }
                     let snapshot = ClipboardSnapshot(
                         content: anchorContent,
+                        images: images,
+                        sourceKind: sourceKind,
                         changeCount: defaults.integer(forKey: ClipNestSettings.lastClipboardChangeCount),
                         hash: ClipboardContent.hash(for: ocrText.isEmpty ? "photo:\(Date().timeIntervalSince1970)" : ocrText))
                     lastSnapshot = snapshot
-                    try await classifyAndSave(generated, snapshot: snapshot)
+                    try await classifyAndSave(generated, snapshot: snapshot,
+                                              format: NoteFormatConfigurationStore.load())
                     return
                 } catch {
                     // Fall through to the OCR + text-model pipeline.
@@ -528,7 +568,12 @@ final class CaptureCoordinator: ObservableObject {
             }
         }
 
-        guard let content = ClipboardContent(text: ocrText) else {
+        // No readable text is still a saveable capture when the picture itself survived:
+        // the note becomes the image plus whatever the AI can name it (方案 §17).
+        let anchorText = ocrText.isEmpty
+            ? (images.isEmpty ? "" : String(localized: "(photo)"))
+            : ocrText
+        guard let content = ClipboardContent(text: anchorText) else {
             isRunning = false
             state = .idle
             statusMessage = String(localized: "No readable text was found in the photo")
@@ -538,10 +583,19 @@ final class CaptureCoordinator: ObservableObject {
         statusMessage = String(localized: "Text recognized — organizing…")
         let snapshot = ClipboardSnapshot(
             content: content,
+            images: images,
+            sourceKind: sourceKind,
             changeCount: defaults.integer(forKey: ClipNestSettings.lastClipboardChangeCount),
-            hash: ClipboardContent.hash(for: content.rawText))
+            hash: ClipboardContent.hash(for: ocrText.isEmpty ? "photo:\(Date().timeIntervalSince1970)" : content.rawText))
         lastSnapshot = snapshot
         await generateAndSave(snapshot)
+    }
+
+    /// Encodes an in-app photo for the vault attachment. Imported files keep their original
+    /// bytes; only this path re-encodes.
+    private static func encodedAttachmentImage(from image: PlatformImage) -> CapturedImage? {
+        guard let jpeg = image.jpegDataForUpload(compressionQuality: 0.9) else { return nil }
+        return CapturedImage(data: jpeg, preferredExtension: "jpg")
     }
 
     /// Vision OCR only. Failures are reported as an empty result rather than thrown, because

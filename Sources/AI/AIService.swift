@@ -54,10 +54,10 @@ enum AIServiceError: LocalizedError {
 }
 
 struct AIService {
-    private let provider: AIProvider
+    private let provider: OpenAICompatibleProvider
 
-    init(configuration: AIConfiguration) {
-        provider = OpenAICompatibleProvider(configuration: configuration)
+    init(configuration: AIConfiguration, format: NoteFormatConfiguration = .default) {
+        provider = OpenAICompatibleProvider(configuration: configuration, format: format)
     }
 
     func generateNote(from content: ClipboardContent,
@@ -72,8 +72,8 @@ struct AIService {
 struct NoteGenerationService: NoteGenerating {
     private let aiService: AIService
 
-    init(configuration: AIConfiguration) {
-        aiService = AIService(configuration: configuration)
+    init(configuration: AIConfiguration, format: NoteFormatConfiguration = .default) {
+        aiService = AIService(configuration: configuration, format: format)
     }
 
     func generate(from content: ClipboardContent,

@@ -29,7 +29,12 @@ enum ClipNestSettings {
     static let localModelPreload = "ai.localModelPreload"
 
     /// How the note body is produced — see `LocalBodyStyle`.
+    ///
+    /// Deprecated: superseded by `noteFormatConfiguration` (方案 §34). Kept only so an
+    /// upgrading install can be migrated; nothing writes it anymore.
     static let localBodyStyle = "ai.localBodyStyle"
+    /// The unified note format — see `NoteFormatConfiguration` (方案 §6, §7).
+    static let noteFormatConfiguration = "note.format.configuration"
     /// The CDN serving `model-manifest.json` (China plan §4). Deliberately not a path:
     /// model locations are computed at runtime, never persisted (China plan §32).
     static let localModelManifestURL = "ai.localModelManifestURL"

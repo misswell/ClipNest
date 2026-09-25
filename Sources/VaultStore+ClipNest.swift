@@ -7,6 +7,7 @@ enum ClipNestVaultError: LocalizedError {
     case noVault
     case cannotCreateFolder
     case cannotWriteNote
+    case cannotWriteAttachment
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ enum ClipNestVaultError: LocalizedError {
             return String(localized: "Could not create the target category folder in the vault.")
         case .cannotWriteNote:
             return String(localized: "Could not write the Markdown note. Check vault permissions or disk space.")
+        case .cannotWriteAttachment:
+            return String(localized: "Could not save the image attachment. Check vault permissions or disk space.")
         }
     }
 }
@@ -128,12 +131,19 @@ extension VaultStore {
         }
     }
 
+    /// Saves a generated note together with its source material (方案 §20, §33).
+    ///
+    /// One transaction: the attachments and the Markdown file succeed or fail together. The
+    /// note path is reserved first, then attachments are written, then the Markdown — and any
+    /// failure removes the reserved note file *and* every attachment created by this call, so
+    /// a failed capture never leaves orphan files behind.
     func saveGeneratedNote(note: GeneratedNote,
-                           originalContent: ClipboardContent,
+                           captured: CapturedContent,
+                           format: NoteFormatConfiguration,
                            date: Date = Date()) async throws -> URL {
         guard let rootURL else { throw ClipNestVaultError.noVault }
         let categoryName = FileNameSanitizer.directoryName(from: note.category,
-                                                            fallback: ClassificationService.inbox)
+                                                           fallback: ClassificationService.inbox)
         let directory = rootURL.appendingPathComponent(categoryName, isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: directory,
@@ -145,13 +155,31 @@ extension VaultStore {
         let baseName = FileNameSanitizer.fileName(from: note.title,
                                                    fallback: "Untitled")
         let url = try reserveUniqueClipNestURL(in: directory, name: baseName + ".md")
+
+        var savedAttachments: [SavedAttachment] = []
+        do {
+            savedAttachments = try await writeAttachments(captured.images,
+                                                          enabled: format.includeOriginalImage,
+                                                          rootURL: rootURL)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+
+        // The capture text is guaranteed non-empty by every caller; the placeholder only
+        // covers the defensive case of an image-only capture.
+        let originalContent = captured.clipboardContent
+            ?? ClipboardContent(text: captured.images.isEmpty ? "(empty)" : "(photo)")!
         let markdown = MarkdownNoteBuilder.make(note: note,
                                                 originalContent: originalContent,
+                                                format: format,
+                                                attachments: savedAttachments,
                                                 date: date)
         do {
             try await writeClipNest(markdown, to: url)
         } catch {
             try? FileManager.default.removeItem(at: url)
+            rollbackAttachments(savedAttachments)
             throw error
         }
         refresh()
@@ -225,6 +253,58 @@ extension VaultStore {
         } catch {
             throw ClipNestVaultError.cannotWriteNote
         }
+    }
+
+    // MARK: - Attachments (方案 §19, §20)
+
+    /// Folder inside the vault that holds images saved with a note.
+    static let attachmentsFolder = "Attachments"
+
+    /// Writes the capture's images when the format asks for them, returning the rollback
+    /// manifest. Any failure removes the files this call already created.
+    private func writeAttachments(_ images: [CapturedImage],
+                                  enabled: Bool,
+                                  rootURL: URL) async throws -> [SavedAttachment] {
+        // Two different concepts (方案 §21): an image can participate in OCR / a vision model
+        // and still not be saved. Only `enabled` images ever reach the vault.
+        guard enabled, !images.isEmpty else { return [] }
+
+        let directory = rootURL.appendingPathComponent(Self.attachmentsFolder, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory,
+                                                     withIntermediateDirectories: true)
+        } catch {
+            throw ClipNestVaultError.cannotWriteAttachment
+        }
+
+        var saved: [SavedAttachment] = []
+        for image in images {
+            let name = "\(Self.attachmentStamp)-\(UUID().uuidString).\(image.fileExtension)"
+            let url = directory.appendingPathComponent(name)
+            do {
+                try await VaultFileAccess.shared.write(image.data, to: url)
+            } catch {
+                rollbackAttachments(saved)
+                throw ClipNestVaultError.cannotWriteAttachment
+            }
+            saved.append(SavedAttachment(url: url,
+                                         relativePath: "\(Self.attachmentsFolder)/\(name)"))
+        }
+        return saved
+    }
+
+    private func rollbackAttachments(_ attachments: [SavedAttachment]) {
+        for attachment in attachments {
+            try? FileManager.default.removeItem(at: attachment.url)
+        }
+    }
+
+    /// Local date stamp for attachment file names, e.g. `2026-09-25` (方案 §19).
+    private static var attachmentStamp: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
     }
 
     private func rawClipboardFileName(for date: Date) -> String {

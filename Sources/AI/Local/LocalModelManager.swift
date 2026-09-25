@@ -338,14 +338,16 @@ final class LocalModelManager: ObservableObject {
     ///
     /// Returning `nil` is the normal case for a fresh install and means the router falls back
     /// to Local Lite — it is never a reason to touch the network (§9, §11).
-    func makeProviderIfReady(profiles: [CategoryProfile]) -> (any NoteGenerating)? {
+    func makeProviderIfReady(profiles: [CategoryProfile],
+                             format: NoteFormatConfiguration = .default) -> (any NoteGenerating)? {
         guard state.isReady else { return nil }
         UserDefaults.standard.set(Date().timeIntervalSince1970,
                                   forKey: ClipNestSettings.localModelLastUsedAt)
         UserDefaults.standard.set(store.installedManifest()?.version ?? descriptor.version,
                                   forKey: ClipNestSettings.localModelInstalledVersion)
         return LocalModelRuntime.shared.provider(modelDirectory: store.modelDirectory,
-                                                profiles: profiles)
+                                                profiles: profiles,
+                                                format: format)
     }
 
     /// Warms the weights while the user is still on their way to a capture.

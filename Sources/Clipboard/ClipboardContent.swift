@@ -79,6 +79,22 @@ struct ClipboardContent: Equatable {
 
 struct ClipboardSnapshot: Equatable {
     let content: ClipboardContent
+    /// Images that travelled with this capture (photo, imported file). Empty for plain
+    /// clipboard text; the bytes live only for the current task (方案 §18).
+    var images: [CapturedImage]
+    var sourceKind: CaptureSourceKind
     let changeCount: Int
     let hash: String
+
+    init(content: ClipboardContent,
+         images: [CapturedImage] = [],
+         sourceKind: CaptureSourceKind = .clipboard,
+         changeCount: Int,
+         hash: String) {
+        self.content = content
+        self.images = images
+        self.sourceKind = sourceKind
+        self.changeCount = changeCount
+        self.hash = hash
+    }
 }

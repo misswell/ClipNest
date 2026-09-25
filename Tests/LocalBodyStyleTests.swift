@@ -2,11 +2,13 @@ import XCTest
 @testable import ClipNest
 
 /// The shipping default: the model writes the title, summary, tags and category, and the body
-/// is the user's own cleaned text.
+/// is the user's own text.
 ///
 /// This is the behaviour that replaces asking for a body the fact guard then threw away — five
 /// times in six, measured on the device. The tests below pin both halves of that: the model is
 /// no longer asked for a body, and a body it returns anyway is ignored rather than trusted.
+/// The legacy `.sourceVerbatim` / `.modelRewrite` pair now lives inside the unified
+/// `NoteFormatConfiguration` (方案 §34); the fixtures keep the old behaviours pinnable.
 final class LocalBodyStyleTests: XCTestCase {
     private let source = """
     # Vision OCR 图片文字识别
@@ -18,21 +20,22 @@ final class LocalBodyStyleTests: XCTestCase {
     private func content() -> ClipboardContent { ClipboardContent(text: source)! }
 
     private func provider(_ response: String,
-                          bodyStyle: LocalBodyStyle) -> (QwenLocalProvider,
-                                                         RecordingLocalEngine) {
+                          format: NoteFormatConfiguration) -> (QwenLocalProvider,
+                                                               RecordingLocalEngine) {
         let engine = RecordingLocalEngine(response: response)
         return (QwenLocalProvider(engine: engine,
                                   profiles: [],
-                                  promptBuilder: LocalPromptBuilder(bodyStyle: bodyStyle)),
+                                  promptBuilder: LocalPromptBuilder(format: format)),
                 engine)
     }
 
     // MARK: - The prompt
 
     func testTheDefaultAsksForFourFieldsAndRulesOutABody() {
-        let prompt = LocalPromptBuilder().prompt(for: content(),
-                                                 existingCategories: ["iOS开发"],
-                                                 preferredLanguage: .automatic)
+        let prompt = LocalPromptBuilder(format: .legacySourceVerbatim)
+            .prompt(for: content(),
+                    existingCategories: ["iOS开发"],
+                    preferredLanguage: .automatic)
         for field in ["title", "summary", "category", "tags"] {
             XCTAssertTrue(prompt.contains(field), "the fast prompt must still ask for \(field)")
         }
@@ -41,9 +44,10 @@ final class LocalBodyStyleTests: XCTestCase {
     }
 
     func testTheDefaultPromptDoesNotAskForABodyRule() {
-        let prompt = LocalPromptBuilder().prompt(for: content(),
-                                                 existingCategories: [],
-                                                 preferredLanguage: .automatic)
+        let prompt = LocalPromptBuilder(format: .legacySourceVerbatim)
+            .prompt(for: content(),
+                    existingCategories: [],
+                    preferredLanguage: .automatic)
         XCTAssertFalse(prompt.contains("content：把原文完整整理成 Markdown"),
                        "the body-writing rule must be gone, not merely unused")
     }
@@ -51,9 +55,9 @@ final class LocalBodyStyleTests: XCTestCase {
     // MARK: - The token budget
 
     func testTheFastPathUsesASmallerTokenBudget() {
-        XCTAssertEqual(LocalPromptBuilder(bodyStyle: .sourceVerbatim).maximumTokens,
+        XCTAssertEqual(LocalPromptBuilder(format: .legacySourceVerbatim).maximumTokens,
                        LocalPromptBuilder.maximumShortAnswerTokens)
-        XCTAssertEqual(LocalPromptBuilder(bodyStyle: .modelRewrite).maximumTokens,
+        XCTAssertEqual(LocalPromptBuilder(format: .legacyModelRewrite).maximumTokens,
                        LocalPromptBuilder.maximumTokens)
         XCTAssertLessThan(LocalPromptBuilder.maximumShortAnswerTokens,
                           LocalPromptBuilder.maximumTokens)
@@ -61,7 +65,7 @@ final class LocalBodyStyleTests: XCTestCase {
 
     func testTheBudgetActuallyReachesTheEngine() async throws {
         let (provider, engine) = provider(#"{"title":"T","summary":"s","category":"","tags":["a"]}"#,
-                                          bodyStyle: .sourceVerbatim)
+                                          format: .legacySourceVerbatim)
         _ = try await provider.generate(from: content(),
                                         existingCategories: [],
                                         preferredLanguage: .automatic)
@@ -77,7 +81,7 @@ final class LocalBodyStyleTests: XCTestCase {
         // to catch.
         let (provider, _) = provider(
             #"{"title":"T","summary":"s","content":"模型自己写的正文","category":"","tags":["a"]}"#,
-            bodyStyle: .sourceVerbatim)
+            format: .legacySourceVerbatim)
         let note = try await provider.generate(from: content(),
                                                existingCategories: [],
                                                preferredLanguage: .automatic)
@@ -88,7 +92,7 @@ final class LocalBodyStyleTests: XCTestCase {
     func testTheFastPathStillFillsEveryField() async throws {
         let (provider, _) = provider(
             #"{"title":"Vision OCR 图片文字识别","summary":"用 Vision 做本地图片文字识别。","category":"iOS开发","tags":["Vision","SwiftUI"]}"#,
-            bodyStyle: .sourceVerbatim)
+            format: .legacySourceVerbatim)
         let note = try await provider.generate(from: content(),
                                                existingCategories: ["iOS开发", "数据库"],
                                                preferredLanguage: .automatic)
@@ -103,8 +107,8 @@ final class LocalBodyStyleTests: XCTestCase {
     /// making the fast path the default.
     func testBothStylesProduceTheSameFieldsForTheSameAnswer() async throws {
         let answer = #"{"title":"标题","summary":"摘要","category":"iOS开发","tags":["Vision"]}"#
-        let (fast, _) = provider(answer, bodyStyle: .sourceVerbatim)
-        let (slow, _) = provider(answer, bodyStyle: .modelRewrite)
+        let (fast, _) = provider(answer, format: .legacySourceVerbatim)
+        let (slow, _) = provider(answer, format: .legacyModelRewrite)
 
         let fastNote = try await fast.generate(from: content(),
                                                existingCategories: ["iOS开发"],
@@ -126,12 +130,33 @@ final class LocalBodyStyleTests: XCTestCase {
     func testAnAnswerWithNoBodyIsNotAFailure() async throws {
         let (provider, _) = provider(
             #"{"title":"T","summary":"s","category":"","tags":["a"]}"#,
-            bodyStyle: .sourceVerbatim)
+            format: .legacySourceVerbatim)
         let note = try await provider.generate(from: content(),
                                                existingCategories: [],
                                                preferredLanguage: .automatic)
         XCTAssertFalse(note.content.isEmpty)
         XCTAssertEqual(note.content, MarkdownContentCleaner.clean(source))
+    }
+
+    /// A format that turned the summary or tags off keeps those fields empty — the model was
+    /// never asked for them, and neither the extractors nor the renderer should revive them
+    /// (方案 §9, §30).
+    func testDisabledFieldsStayEmpty() async throws {
+        var format = NoteFormatConfiguration.standard
+        format.includeSummary = false
+        format.includeTags = false
+        format.preset = format.resolvedPreset
+
+        let (provider, _) = provider(
+            #"{"title":"T","summary":"s","category":"iOS开发","tags":["a"]}"#,
+            format: format)
+        let note = try await provider.generate(from: content(),
+                                               existingCategories: ["iOS开发"],
+                                               preferredLanguage: .automatic)
+        XCTAssertEqual(note.summary, "")
+        XCTAssertEqual(note.tags, [])
+        XCTAssertEqual(note.title, "T")
+        XCTAssertEqual(note.category, "iOS开发")
     }
 }
 

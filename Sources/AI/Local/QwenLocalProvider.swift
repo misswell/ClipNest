@@ -153,29 +153,35 @@ struct QwenLocalProvider: ProgressReportingNoteGenerating {
     }
 
     /// Fills in whatever the model omitted, without ever discarding what it produced.
+    ///
+    /// Fields the format did not ask for stay empty (方案 §9): the renderer and the preview
+    /// hide them anyway, so spending the extractors on them would only blur what the user
+    /// chose — and the model was never asked for them in the first place.
     private func assemble(fields: LocalGeneratedNoteFields,
                           source: ClipboardContent,
                           text: String,
                           existingCategories: [String],
                           preferredLanguage: PreferredLanguage) -> GeneratedNote {
         let title = resolvedTitle(fields.title, text: text, preferredLanguage: preferredLanguage)
-        let summary = fields.summary.isEmpty
-            ? summarizer.summarize(text, title: title)
-            : fields.summary
-        // With `.sourceVerbatim` there is no model body to weigh: the source *is* the body, so
+        let summary = promptBuilder.format.includeSummary
+            ? (fields.summary.isEmpty ? summarizer.summarize(text, title: title) : fields.summary)
+            : ""
+        // With no body requested there is no model body to weigh: the source *is* the body, so
         // the fact-preservation guard has nothing to reject and cannot be the reason a capture
         // looks different from the fast path.
-        let content = promptBuilder.bodyStyle == .sourceVerbatim
-            ? MarkdownContentCleaner.clean(text)
-            : resolvedContent(fields.content, text: text, title: title)
+        let content = promptBuilder.requiresBody
+            ? resolvedContent(fields.content, text: text, title: title)
+            : MarkdownContentCleaner.clean(text)
         let category = resolvedCategory(fields.category,
                                         text: text,
                                         existingCategories: existingCategories)
-        let tags = resolvedTags(fields.tags,
-                                text: text,
-                                title: title,
-                                category: category,
-                                existingCategories: existingCategories)
+        let tags = promptBuilder.format.includeTags
+            ? resolvedTags(fields.tags,
+                           text: text,
+                           title: title,
+                           category: category,
+                           existingCategories: existingCategories)
+            : []
 
         return GeneratedNote(title: title,
                              summary: summary,

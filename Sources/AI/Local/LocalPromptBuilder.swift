@@ -1,50 +1,15 @@
 import Foundation
 
-/// How the note body is produced.
-///
-/// Measured on real weights, on device: of six captures the model's rewritten body survived the
-/// fact-preservation guard **once**. The other five times the body was discarded for the
-/// cleaned source — after the decode phase had already spent ~5 s producing it. Since the body
-/// is most of the decoded tokens, asking for it was the single largest source of wasted time in
-/// the whole capture.
-///
-/// So the default is `.sourceVerbatim`: the model does the four things it is actually good at
-/// and kept for (title, summary, tags, category) and the body is the user's own text. This is
-/// not a speed/quality compromise — for the five-of-six case the saved note is *byte-identical*
-/// to what the slow path produced, and it can no longer drop a fact because it never rewrites
-/// one.
-enum LocalBodyStyle: String, CaseIterable, Sendable {
-    /// The body is the cleaned source; the model is not asked for one.
-    case sourceVerbatim
-    /// The model rewrites the body, with the fact-preservation guard as the safety net.
-    case modelRewrite
-
-    static let `default`: LocalBodyStyle = .sourceVerbatim
-
-    var displayName: String {
-        switch self {
-        case .sourceVerbatim: return String(localized: "Keep the original text")
-        case .modelRewrite: return String(localized: "Let the model rewrite it")
-        }
-    }
-
-    /// Short line under the picker in Settings.
-    var explanation: String {
-        switch self {
-        case .sourceVerbatim:
-            return String(localized: "Fastest, and the body can never lose a fact. The model still writes the title, summary, tags and category.")
-        case .modelRewrite:
-            return String(localized: "The model also restructures the body. Slower, and it falls back to your original text whenever a fact would be lost.")
-        }
-    }
-}
-
 /// Builds the prompt for the local small model (China plan §20, §21).
 ///
 /// A 0.6B model is not a frontier model: it follows short, explicitly numbered rules far better
 /// than prose. Every rule below was added in response to an observed failure on the real
 /// weights — with the earlier, terser prompt the model returned the *category list* as the
 /// title and the tags, and reduced a five-line capture to its last sentence.
+///
+/// The prompt no longer owns note-format decisions (方案 §13): the JSON schema is derived
+/// from the shared `NoteFormatConfiguration`, so a "title + original" capture asks the model
+/// for two fields instead of five and finishes measurably sooner.
 ///
 /// Thinking is not requested here at all. `/no_think` was tried and measurably does not work
 /// on this model; the switch that does work is Qwen3's `enable_thinking` template flag, which
@@ -65,11 +30,18 @@ struct LocalPromptBuilder: Equatable {
     static let maximumInputCharacters = 4000
 
     var maximumInputCharacters: Int = LocalPromptBuilder.maximumInputCharacters
-    var bodyStyle: LocalBodyStyle = .default
+    /// The one shared note format (方案 §6). The prompt is its projection onto this model.
+    var format: NoteFormatConfiguration = .default
 
-    /// The token budget that matches `bodyStyle`.
+    var requirements: NoteGenerationRequirements { format.generationRequirements }
+
+    /// Whether the model is asked to write a body at all — this single switch drives both
+    /// the schema and the token budget.
+    var requiresBody: Bool { requirements.body }
+
+    /// The token budget that matches the requested fields.
     var maximumTokens: Int {
-        bodyStyle == .modelRewrite ? Self.maximumTokens : Self.maximumShortAnswerTokens
+        requiresBody ? Self.maximumTokens : Self.maximumShortAnswerTokens
     }
 
     /// Handed to the tokenizer's chat template to turn Qwen3's reasoning off (§21).
@@ -88,58 +60,91 @@ struct LocalPromptBuilder: Equatable {
                 existingCategories: [String],
                 preferredLanguage: PreferredLanguage) -> String {
         let text = Self.condensed(content.text, limit: maximumInputCharacters)
-        let categories = Self.categoryList(existingCategories)
+        let wanted = requirements
+
+        var fields: [String] = []
+        if wanted.title { fields.append("\"title\":\"...\"") }
+        if wanted.summary { fields.append("\"summary\":\"...\"") }
+        if wanted.body { fields.append("\"content\":\"...\"") }
+        // Classification stays requested even when the note renders none of it (方案 §30).
+        fields.append("\"category\":\"...\"")
+        if wanted.tags { fields.append("\"tags\":[\"...\"]") }
+
+        var rules: [String] = []
+        var number = 1
+        if wanted.title {
+            rules.append("\(number). title：原文主题，20 字以内，不要使用分类名。")
+            number += 1
+        }
+        if wanted.summary {
+            rules.append("\(number). summary：1-3 句，覆盖原文全部要点。")
+            number += 1
+        }
+        if wanted.body {
+            rules.append(Self.bodyRule(number: number, format: format))
+            number += 1
+        }
+        if wanted.tags {
+            rules.append("\(number). tags：2-5 个关键词，必须是原文里出现过的词，不要使用分类名。")
+            number += 1
+        }
 
         // The category list is stated once, inside the rule that governs it. Listing it on its
         // own line next to the source is what made the model copy it into the title and tags.
-        let categoryRuleNumber = bodyStyle == .modelRewrite ? 5 : 4
-        let categoryRule = existingCategories.isEmpty
-            ? "\(categoryRuleNumber). category：没有可选分类，填空字符串 \"\"。"
-            : """
-              \(categoryRuleNumber). category：只能从这些分类里原样选一个，都不合适就填空字符串 ""。
-                 可选分类：\(categories)
-              """
+        rules.append(Self.categoryRule(number: number, existingCategories: existingCategories))
+        number += 1
+        rules.append("\(number). 禁止编造原文没有的信息。\(Self.languageDirective(preferredLanguage))")
+        number += 1
 
-        let finalRuleNumber = categoryRuleNumber + 1
-        let closing = "\(finalRuleNumber). 禁止编造原文没有的信息。\(Self.languageDirective(preferredLanguage))"
-
-        switch bodyStyle {
-        case .modelRewrite:
-            return """
-            你是 ClipNest 笔记整理器。阅读原文，只返回一个 JSON 对象：
-            {"title":"...","summary":"...","content":"...","category":"...","tags":["..."]}
-
-            规则：
-            1. title：原文主题，20 字以内，不要使用分类名。
-            2. summary：1-3 句，覆盖原文全部要点。
-            3. content：把原文完整整理成 Markdown，保留所有要点、代码、数字和 URL，不能只写一两句。
-            4. tags：2-5 个关键词，必须是原文里出现过的词，不要使用分类名。
-            \(categoryRule)
-            \(closing)
-
-            原文：
-            \(text)
-            """
-
-        case .sourceVerbatim:
-            // `content` is absent from the schema *and* explicitly ruled out: naming what must
-            // not be produced is what stopped the model adding the field anyway.
-            return """
-            你是 ClipNest 笔记整理器。阅读原文，只返回一个 JSON 对象：
-            {"title":"...","summary":"...","category":"...","tags":["..."]}
-
-            规则：
-            1. title：原文主题，20 字以内，不要使用分类名。
-            2. summary：1-3 句，覆盖原文全部要点。
-            3. tags：2-5 个关键词，必须是原文里出现过的词，不要使用分类名。
-            \(categoryRule)
-            \(closing)
-            \(finalRuleNumber + 1). 不要输出 content 字段，正文由程序保留原文。
-
-            原文：
-            \(text)
-            """
+        // Fields the format does not want are ruled out *by name*: naming what must not be
+        // produced is what stopped the model adding the field anyway (§20).
+        let excluded = Self.excludedFields(requirements: wanted)
+        if !excluded.isEmpty {
+            let joined = excluded.joined(separator: "、")
+            let reason = excluded.contains("content") ? "，正文由程序保留原文" : ""
+            rules.append("\(number). 不要输出 \(joined) 字段\(reason)。")
         }
+
+        return """
+        你是 ClipNest 笔记整理器。阅读原文，只返回一个 JSON 对象：
+        {\(fields.joined(separator: ","))}
+
+        规则：
+        \(rules.joined(separator: "\n"))
+
+        原文：
+        \(text)
+        """
+    }
+
+    /// The body rule, including the format's style directive (方案 §12). A custom style
+    /// carries the user's own compressed instruction instead.
+    private static func bodyRule(number: Int, format: NoteFormatConfiguration) -> String {
+        let base = "\(number). content：把原文完整整理成 Markdown，保留所有要点、代码、数字和 URL，不能只写一两句"
+        if format.bodyStyle == .custom {
+            let instruction = format.localInstruction
+            guard !instruction.isEmpty else { return base + "。" }
+            return base + "。风格要求：\(instruction)"
+        }
+        guard let style = format.bodyStyle.localStyleInstruction else { return base + "。" }
+        return base + "，\(style)"
+    }
+
+    private static func categoryRule(number: Int, existingCategories: [String]) -> String {
+        existingCategories.isEmpty
+            ? "\(number). category：没有可选分类，填空字符串 \"\"。"
+            : """
+              \(number). category：只能从这些分类里原样选一个，都不合适就填空字符串 ""。
+                 可选分类：\(categoryList(existingCategories))
+              """
+    }
+
+    private static func excludedFields(requirements: NoteGenerationRequirements) -> [String] {
+        var excluded: [String] = []
+        if !requirements.body { excluded.append("content") }
+        if !requirements.summary { excluded.append("summary") }
+        if !requirements.tags { excluded.append("tags") }
+        return excluded
     }
 
     /// A single, unambiguous instruction about the output language.

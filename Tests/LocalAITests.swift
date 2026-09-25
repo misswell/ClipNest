@@ -253,7 +253,7 @@ final class LocalModeTests: XCTestCase {
             onlineConfiguration: validOnlineConfiguration,
             localModelProvider: LabelledProvider(label: "qwen"),
             localLiteProviderFactory: { _ in LabelledProvider(label: "lite") },
-            onlineProviderFactory: { _ in LabelledProvider(label: "online") }
+            onlineProviderFactory: { _, _ in LabelledProvider(label: "online") }
         )
 
         let note = try await router.generate(from: makeContent(),
@@ -269,7 +269,7 @@ final class LocalModeTests: XCTestCase {
             onlineConfiguration: validOnlineConfiguration,
             localModelProvider: nil,
             localLiteProviderFactory: { _ in LabelledProvider(label: "lite") },
-            onlineProviderFactory: { _ in LabelledProvider(label: "online") }
+            onlineProviderFactory: { _, _ in LabelledProvider(label: "online") }
         )
 
         let note = try await router.generate(from: makeContent(),
@@ -289,7 +289,7 @@ final class LocalModeTests: XCTestCase {
                 label: "qwen",
                 error: LocalAIError.modelUnavailable("weights missing")),
             localLiteProviderFactory: { _ in LabelledProvider(label: "lite") },
-            onlineProviderFactory: { _ in
+            onlineProviderFactory: { _, _ in
                 counter.increment()
                 return LabelledProvider(label: "online")
             }
@@ -313,7 +313,7 @@ final class LocalModeTests: XCTestCase {
                 label: "qwen",
                 error: LocalAIError.generationFailed("ran out of memory")),
             localLiteProviderFactory: { _ in LabelledProvider(label: "lite") },
-            onlineProviderFactory: { _ in
+            onlineProviderFactory: { _, _ in
                 counter.increment()
                 return LabelledProvider(label: "online")
             }
@@ -335,7 +335,7 @@ final class LocalModeTests: XCTestCase {
             onlineConfiguration: validOnlineConfiguration,
             localModelProvider: LabelledProvider(label: "qwen", error: Boom()),
             localLiteProviderFactory: { _ in LabelledProvider(label: "lite") },
-            onlineProviderFactory: { _ in
+            onlineProviderFactory: { _, _ in
                 counter.increment()
                 return LabelledProvider(label: "online")
             }
@@ -388,7 +388,7 @@ final class OnlineModeTests: XCTestCase {
             onlineConfiguration: validOnlineConfiguration,
             localModelProvider: LabelledProvider(label: "qwen"),
             localLiteProviderFactory: { _ in LabelledProvider(label: "lite") },
-            onlineProviderFactory: { _ in
+            onlineProviderFactory: { _, _ in
                 counter.increment()
                 return LabelledProvider(label: "online")
             }
@@ -408,7 +408,7 @@ final class OnlineModeTests: XCTestCase {
             mode: .online,
             onlineConfiguration: validOnlineConfiguration,
             localModelProvider: LabelledProvider(label: "qwen"),
-            onlineProviderFactory: { _ in LabelledProvider(label: "online") }
+            onlineProviderFactory: { _, _ in LabelledProvider(label: "online") }
         )
 
         let note = try await router.generate(from: ClipboardContent(text: "hello")!,
@@ -422,7 +422,7 @@ final class OnlineModeTests: XCTestCase {
         let router = NoteGenerationRouter(
             mode: .online,
             onlineConfiguration: validOnlineConfiguration,
-            onlineProviderFactory: { _ in LabelledProvider(label: "online", error: Boom()) }
+            onlineProviderFactory: { _, _ in LabelledProvider(label: "online", error: Boom()) }
         )
 
         do {
@@ -446,7 +446,7 @@ final class OnlineModeTests: XCTestCase {
         let router = NoteGenerationRouter(
             mode: .online,
             onlineConfiguration: validOnlineConfiguration,
-            onlineProviderFactory: { OpenAICompatibleProvider(configuration: $0, session: session) }
+            onlineProviderFactory: { OpenAICompatibleProvider(configuration: $0, format: $1, session: session) }
         )
 
         let note = try await router.generate(from: ClipboardContent(text: "Swift actor notes")!,
@@ -519,7 +519,7 @@ final class PrivacyTests: XCTestCase {
             mode: .local,
             onlineConfiguration: validOnlineConfiguration,
             localModelProvider: nil,
-            onlineProviderFactory: { OpenAICompatibleProvider(configuration: $0, session: session) }
+            onlineProviderFactory: { OpenAICompatibleProvider(configuration: $0, format: $1, session: session) }
         )
 
         do {

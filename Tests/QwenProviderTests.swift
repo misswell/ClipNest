@@ -150,8 +150,8 @@ final class LocalGeneratedNoteDecoderTests: XCTestCase {
 final class LocalPromptBuilderTests: XCTestCase {
     private func prompt(categories: [String] = ["iOS开发", "数据库"],
                         language: PreferredLanguage = .automatic,
-                        bodyStyle: LocalBodyStyle = .default) -> String {
-        LocalPromptBuilder(bodyStyle: bodyStyle)
+                        format: NoteFormatConfiguration = .legacySourceVerbatim) -> String {
+        LocalPromptBuilder(format: format)
             .prompt(for: ClipboardContent(text: "使用 Vision 做 OCR 识别图片文字")!,
                     existingCategories: categories,
                     preferredLanguage: language)
@@ -163,11 +163,23 @@ final class LocalPromptBuilderTests: XCTestCase {
     }
 
     func testThePromptAsksForJSONAndNamesTheFields() {
-        let text = prompt(bodyStyle: .modelRewrite)
+        let text = prompt(format: .legacyModelRewrite)
         for field in ["title", "summary", "content", "category", "tags"] {
             XCTAssertTrue(text.contains(field), "the prompt must name \(field)")
         }
         XCTAssertTrue(text.contains("JSON"))
+    }
+
+    /// 方案 §13: a capture that wants only a title asks the model for exactly two fields, so
+    /// the 0.6B model spends none of its budget on a summary, body or tags it will never
+    /// render.
+    func testTheSchemaShrinksToTheRequestedFields() {
+        let text = prompt(format: .titleAndOriginal)
+        XCTAssertTrue(text.contains(#"{"title":"...","category":"..."}"#),
+                      "title + original must ask for a two-field JSON")
+        XCTAssertTrue(text.contains("不要输出 content、summary、tags 字段"))
+        XCTAssertFalse(text.contains("summary："), "no summary rule may remain")
+        XCTAssertFalse(text.contains("tags："), "no tags rule may remain")
     }
 
     /// §21: reasoning tokens would triple latency on a phone for no benefit.
@@ -194,11 +206,24 @@ final class LocalPromptBuilderTests: XCTestCase {
 
     func testThePromptForbidsInventionAndProtectsFacts() {
         // Both styles must forbid invention.
-        XCTAssertTrue(prompt(bodyStyle: .sourceVerbatim).contains("禁止编造"))
-        XCTAssertTrue(prompt(bodyStyle: .modelRewrite).contains("禁止编造"))
+        XCTAssertTrue(prompt(format: .legacySourceVerbatim).contains("禁止编造"))
+        XCTAssertTrue(prompt(format: .legacyModelRewrite).contains("禁止编造"))
         // Protecting URLs and numbers is only meaningful when the model writes a body; the
         // fast path uses the user's own text and has nothing to protect.
-        XCTAssertTrue(prompt(bodyStyle: .modelRewrite).contains("URL"))
+        XCTAssertTrue(prompt(format: .legacyModelRewrite).contains("URL"))
+    }
+
+    /// 方案 §26: a custom style's instruction reaches the prompt, compressed to the short
+    /// budget the small model can follow.
+    func testCustomStyleCarriesTheCompressedInstruction() {
+        var format = NoteFormatConfiguration.standard
+        format.bodyStyle = .custom
+        format.includeGeneratedBody = true
+        format.customInstruction = String(repeating: "保持代码原样，", count: 120)
+        let text = prompt(format: format)
+        XCTAssertTrue(text.contains("风格要求：保持代码原样"))
+        XCTAssertLessThanOrEqual(format.localInstruction.count,
+                                 NoteFormatConfiguration.maximumLocalInstructionCharacters)
     }
 
     /// The prompt is truncated, but the *saved note* still uses the whole source, so a long
@@ -224,16 +249,16 @@ final class QwenProviderTests: XCTestCase {
     private func content() -> ClipboardContent { ClipboardContent(text: source)! }
 
     /// Builds a provider for the body-handling tests, which are all about what happens to the
-    /// *model's* body — so they pin `.modelRewrite` rather than following the shipping default.
-    /// The default's own behaviour is covered by `LocalBodyStyleTests`.
+    /// *model's* body — so they pin the rewrite format rather than following the shipping
+    /// default. The default's own behaviour is covered by `LocalBodyStyleTests`.
     private func provider(_ response: String,
                           profiles: [CategoryProfile] = [],
-                          bodyStyle: LocalBodyStyle = .modelRewrite) -> (QwenLocalProvider,
-                                                                         RecordingLocalEngine) {
+                          format: NoteFormatConfiguration = .legacyModelRewrite) -> (QwenLocalProvider,
+                                                                                     RecordingLocalEngine) {
         let engine = RecordingLocalEngine(response: response)
         return (QwenLocalProvider(engine: engine,
                                   profiles: profiles,
-                                  promptBuilder: LocalPromptBuilder(bodyStyle: bodyStyle)),
+                                  promptBuilder: LocalPromptBuilder(format: format)),
                 engine)
     }
 
@@ -477,7 +502,7 @@ final class LocalModelFallbackTests: XCTestCase {
             onlineConfiguration: validOnlineConfiguration,
             localModelProvider: broken,
             localLiteProviderFactory: { profiles in LocalLiteNoteProvider(profiles: profiles) },
-            onlineProviderFactory: { _ in
+            onlineProviderFactory: { _, _ in
                 counter.increment()
                 return LabelledProvider(label: "online")
             }
@@ -506,7 +531,7 @@ final class LocalModelFallbackTests: XCTestCase {
                 liteCalls += 1
                 return LabelledProvider(label: "lite")
             },
-            onlineProviderFactory: { _ in LabelledProvider(label: "online") }
+            onlineProviderFactory: { _, _ in LabelledProvider(label: "online") }
         )
 
         let note = try await router.generate(from: ClipboardContent(text: source)!,

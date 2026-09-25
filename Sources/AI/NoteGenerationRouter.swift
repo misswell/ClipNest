@@ -10,10 +10,13 @@ import Foundation
 struct NoteGenerationRouter: ProgressReportingNoteGenerating {
     /// Builds the network-capable provider. Tests inject a counting or failing implementation
     /// here to prove `.local` never reaches the network.
-    typealias OnlineProviderFactory = (AIConfiguration) -> any NoteGenerating
+    typealias OnlineProviderFactory = (AIConfiguration, NoteFormatConfiguration) -> any NoteGenerating
 
     let mode: AIProcessingMode
     let onlineConfiguration: AIConfiguration
+    /// The shared note format, passed through to whichever provider runs (方案 §33). The
+    /// router itself never interprets it.
+    var format: NoteFormatConfiguration
     /// Category fingerprints used by the local classifier. Empty falls back to bare names.
     var categoryProfiles: [CategoryProfile]
 
@@ -27,16 +30,18 @@ struct NoteGenerationRouter: ProgressReportingNoteGenerating {
 
     init(mode: AIProcessingMode,
          onlineConfiguration: AIConfiguration,
+         format: NoteFormatConfiguration = .default,
          categoryProfiles: [CategoryProfile] = [],
          localModelProvider: (any NoteGenerating)? = nil,
          localLiteProviderFactory: @escaping ([CategoryProfile]) -> any NoteGenerating = {
              LocalLiteNoteProvider(profiles: $0)
          },
          onlineProviderFactory: @escaping OnlineProviderFactory = {
-             NoteGenerationService(configuration: $0)
+             NoteGenerationService(configuration: $0, format: $1)
          }) {
         self.mode = mode
         self.onlineConfiguration = onlineConfiguration
+        self.format = format
         self.categoryProfiles = categoryProfiles
         self.localModelProvider = localModelProvider
         self.localLiteProviderFactory = localLiteProviderFactory
@@ -48,12 +53,15 @@ struct NoteGenerationRouter: ProgressReportingNoteGenerating {
     /// `@MainActor` because that resolution consults `LocalModelManager`; the resulting router
     /// is an ordinary value and can then be used from anywhere.
     @MainActor
-    init(configuration: GenerationConfiguration, categoryProfiles: [CategoryProfile] = []) {
+    init(configuration: GenerationConfiguration,
+         categoryProfiles: [CategoryProfile] = [],
+         format: NoteFormatConfiguration = .default) {
         self.init(mode: configuration.mode,
                   onlineConfiguration: configuration.text,
+                  format: format,
                   categoryProfiles: categoryProfiles,
                   localModelProvider: LocalModelManager.shared.makeProviderIfReady(
-                      profiles: categoryProfiles))
+                      profiles: categoryProfiles, format: format))
     }
 
     var hasValidOnlineConfiguration: Bool { onlineConfiguration.isValid }
@@ -143,7 +151,7 @@ struct NoteGenerationRouter: ProgressReportingNoteGenerating {
     private func generateOnline(from content: ClipboardContent,
                                 existingCategories: [String],
                                 preferredLanguage: PreferredLanguage) async throws -> GeneratedNote {
-        let provider = onlineProviderFactory(onlineConfiguration)
+        let provider = onlineProviderFactory(onlineConfiguration, format)
         return try await provider.generate(from: content,
                                            existingCategories: existingCategories,
                                            preferredLanguage: preferredLanguage)

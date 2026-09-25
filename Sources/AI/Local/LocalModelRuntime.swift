@@ -217,16 +217,16 @@ actor LocalModelRuntime {
 
     /// Wraps this runtime as a `NoteGenerating` provider for one capture.
     ///
-    /// The body style is read from settings here, at the one place a provider is built, so the
-    /// router and the coordinator stay unaware of it.
+    /// The note format is handed in at the one place a provider is built (方案 §13), so the
+    /// router and the coordinator stay unaware of it and the prompt matches whatever the
+    /// online path would have asked for.
     nonisolated func provider(modelDirectory: URL,
-                              profiles: [CategoryProfile]) -> any NoteGenerating {
-        let raw = UserDefaults.standard.string(forKey: ClipNestSettings.localBodyStyle)
-        let bodyStyle = raw.flatMap(LocalBodyStyle.init(rawValue:)) ?? .default
+                              profiles: [CategoryProfile],
+                              format: NoteFormatConfiguration = .default) -> any NoteGenerating {
         return QwenLocalProvider(engine: RuntimeBackedLocalEngine(runtime: self,
                                                                  modelDirectory: modelDirectory),
                                  profiles: profiles,
-                                 promptBuilder: LocalPromptBuilder(bodyStyle: bodyStyle))
+                                 promptBuilder: LocalPromptBuilder(format: format))
     }
 }
 

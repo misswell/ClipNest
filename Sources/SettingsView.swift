@@ -19,7 +19,6 @@ struct SettingsView: View {
     /// The CDN serving `model-manifest.json` (China plan §4).
     @AppStorage(ClipNestSettings.localModelManifestURL) private var modelManifestURL = ""
     @AppStorage(ClipNestSettings.localModelPreload) private var localModelPreload = true
-    @AppStorage(ClipNestSettings.localBodyStyle) private var localBodyStyle = LocalBodyStyle.default.rawValue
     @EnvironmentObject private var search: LocalSearchController
     @StateObject private var modelManager = LocalModelManager.shared
     @State private var capabilities: LocalAICapabilities?
@@ -216,6 +215,11 @@ struct SettingsView: View {
                         .padding(.bottom, AppMetrics.rowVertical)
                 }
 
+                // One note format for every path — local model, Local Lite and online (方案 §3).
+                sectionCard("NOTE FORMAT") {
+                    NoteFormatSettingsSection()
+                }
+
                 if isLocalOnly {
                     sectionCard("LOCAL ENHANCEMENT MODEL") {
                         localModelRows
@@ -260,21 +264,6 @@ struct SettingsView: View {
                         .foregroundStyle(Theme.mutedInk)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.bottom, AppMetrics.rowVertical)
-                    rowDivider
-                    Picker(selection: $localBodyStyle) {
-                        ForEach(LocalBodyStyle.allCases, id: \.rawValue) { style in
-                            Text(style.displayName).tag(style.rawValue)
-                        }
-                    } label: {
-                        Label("Note body", systemImage: "doc.plaintext")
-                    }
-                    .padding(.vertical, AppMetrics.rowVertical)
-                    Text((LocalBodyStyle(rawValue: localBodyStyle) ?? .default).explanation)
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedInk)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.bottom, AppMetrics.rowVertical)
-                    rowDivider
                 }
 
                 sectionCard("LOCAL SEARCH") {

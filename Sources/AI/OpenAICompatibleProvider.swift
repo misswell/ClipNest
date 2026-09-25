@@ -5,10 +5,16 @@ import Foundation
 /// hand it to the coordinator directly (with an injectable session for tests).
 struct OpenAICompatibleProvider: AIProvider, NoteGenerating {
     let configuration: AIConfiguration
+    /// The shared note format: shapes the system prompt's JSON schema and decides which
+    /// missing fields are tolerated in the answer (方案 §10, §28).
+    var format: NoteFormatConfiguration
     private let session: URLSession
 
-    init(configuration: AIConfiguration, session: URLSession = .shared) {
+    init(configuration: AIConfiguration,
+         format: NoteFormatConfiguration = .default,
+         session: URLSession = .shared) {
         self.configuration = configuration
+        self.format = format
         self.session = session
     }
 
@@ -40,7 +46,8 @@ struct OpenAICompatibleProvider: AIProvider, NoteGenerating {
                 .init(role: "system",
                       content: NotePromptBuilder.systemPrompt(
                         existingCategories: existingCategories,
-                        preferredLanguage: preferredLanguage)),
+                        preferredLanguage: preferredLanguage,
+                        format: format)),
                 .init(role: "user", content: NotePromptBuilder.userPrompt(for: content))
             ],
             temperature: 0.2,
@@ -77,7 +84,7 @@ struct OpenAICompatibleProvider: AIProvider, NoteGenerating {
         } catch {
             throw AIServiceError.invalidJSON
         }
-        return try payload.makeNote()
+        return try payload.makeNote(requirements: format.generationRequirements)
     }
 
     /// Photo capture path: sends the image (plus optional OCR text as context) to a
@@ -85,7 +92,8 @@ struct OpenAICompatibleProvider: AIProvider, NoteGenerating {
     func generateVisionNote(imageData: Data,
                             ocrText: String,
                             existingCategories: [String],
-                            preferredLanguage: PreferredLanguage) async throws -> GeneratedNote {
+                            preferredLanguage: PreferredLanguage,
+                            format: NoteFormatConfiguration = .default) async throws -> GeneratedNote {
         guard configuration.isValid else { throw AIServiceError.invalidConfiguration }
         guard let endpoint = makeEndpoint(from: configuration.baseURL) else {
             throw AIServiceError.invalidEndpoint
@@ -114,7 +122,8 @@ struct OpenAICompatibleProvider: AIProvider, NoteGenerating {
                       content: [.init(type: "text",
                                       text: NotePromptBuilder.systemPrompt(
                                         existingCategories: existingCategories,
-                                        preferredLanguage: preferredLanguage),
+                                        preferredLanguage: preferredLanguage,
+                                        format: format),
                                       imageURL: nil)]),
                 .init(role: "user",
                       content: [
@@ -152,7 +161,7 @@ struct OpenAICompatibleProvider: AIProvider, NoteGenerating {
         } catch {
             throw AIServiceError.invalidJSON
         }
-        return try payload.makeNote()
+        return try payload.makeNote(requirements: format.generationRequirements)
     }
 
     private func makeEndpoint(from rawBaseURL: String) -> URL? {
@@ -273,11 +282,18 @@ private struct GeneratedNotePayload: Decodable {
     let tags: [String]?
     let sourceURL: String?
 
-    func makeNote() throws -> GeneratedNote {
+    /// A field the format never asked for may be missing (方案 §28): a "title + original"
+    /// capture returns only `{title, category}` and that must decode, not fail. What *was*
+    /// requested and came back empty is still a broken answer.
+    func makeNote(requirements: NoteGenerationRequirements) throws -> GeneratedNote {
         let title = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let content = content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !title.isEmpty else { throw AIServiceError.invalidNote(String(localized: "missing title")) }
-        guard !content.isEmpty else { throw AIServiceError.invalidNote(String(localized: "missing body")) }
+        if requirements.title, title.isEmpty {
+            throw AIServiceError.invalidNote(String(localized: "missing title"))
+        }
+        if requirements.body, content.isEmpty {
+            throw AIServiceError.invalidNote(String(localized: "missing body"))
+        }
 
         let summary = summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let tags = (tags ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }

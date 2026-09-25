@@ -1,31 +1,97 @@
 import Foundation
 
+/// Renders a `GeneratedNote` plus the captured source material into the final Markdown.
+///
+/// The shape is no longer hardcoded (方案 §15, §16): every section exists only when the
+/// `NoteFormatConfiguration` asks for it and the material for it exists. Headings are
+/// minimal by rule (方案 §16) — a note that is just a title and a body gets no `##` chrome
+/// at all; the old behaviour of always appending `## 原始内容` is gone.
 enum MarkdownNoteBuilder {
     static func make(note: GeneratedNote,
                      originalContent: ClipboardContent,
+                     format: NoteFormatConfiguration = .default,
+                     attachments: [SavedAttachment] = [],
                      date: Date = Date()) -> String {
-        var lines = frontmatter(for: note,
-                                sourceURL: note.sourceURL ?? originalContent.sourceURL,
+        var lines: [String] = []
+
+        let sourceURL = note.sourceURL ?? originalContent.sourceURL
+        if format.includeFrontmatter {
+            lines = frontmatter(for: note,
+                                sourceURL: format.includeSourceURL ? sourceURL : nil,
+                                includeTags: format.includeTags,
+                                includeCreatedAt: format.includeCreatedAt,
                                 date: date)
-        lines.append("")
+        }
+
         let title = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        lines.append("# \(title.isEmpty ? "Untitled" : title)")
+        if format.includeTitle {
+            if !lines.isEmpty { lines.append("") }
+            lines.append("# \(title.isEmpty ? "Untitled" : title)")
+        }
 
-        let summary = note.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = format.includeSummary
+            ? note.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
+        let originalText = originalContent.text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // The body: the model's organized text when the format wants one. When the body slot
+        // ends up empty anyway — a provider that answered without its body — the source takes
+        // the slot: a title-only note is a worse outcome than the text the user captured. A
+        // format that wanted neither a body nor the source (title-only) is honoured as chosen.
+        var body = format.generatesBody
+            ? note.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
+        if body.isEmpty, format.generatesBody || format.includeOriginalText {
+            body = originalText
+        }
+
         if !summary.isEmpty {
-            lines.append(contentsOf: ["", "## 摘要", "", summary])
+            if !lines.isEmpty { lines.append("") }
+            lines.append(contentsOf: ["## 摘要", "", summary])
+        }
+        if !body.isEmpty {
+            if !lines.isEmpty { lines.append("") }
+            if summary.isEmpty {
+                lines.append(body)
+            } else {
+                lines.append(contentsOf: ["## 正文", "", body])
+            }
         }
 
-        let content = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !content.isEmpty {
-            lines.append(contentsOf: ["", "## 内容", "", content])
-        } else if !originalContent.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            // Keep the note useful even if a provider returns no separate body.
-            lines.append(contentsOf: ["", "## 内容", "", originalContent.rawText])
+        if format.includeOriginalImage {
+            for attachment in attachments {
+                if !lines.isEmpty { lines.append("") }
+                lines.append(embedLine(for: attachment, style: format.imageLinkStyle))
+            }
         }
 
-        lines.append(contentsOf: ["", "## 原始内容", ""])
-        lines.append(contentsOf: quote(originalContent.rawText))
+        // The source is quoted as its own section only when it is *not* already the body —
+        // that distinction is what "keep the original text" means next to an organized body
+        // (方案 §16).
+        if format.includeOriginalText,
+           !originalText.isEmpty,
+           originalText != body {
+            if !lines.isEmpty { lines.append("") }
+            lines.append(contentsOf: ["## 原始内容", ""])
+            lines.append(contentsOf: quote(originalContent.text))
+        }
+
+        // Metadata that would have lived in the frontmatter degrades to inline lines when
+        // the frontmatter is off, so turning the frontmatter off never silently drops data.
+        if !format.includeFrontmatter {
+            if format.includeTags {
+                let tags = uniqueTags(note.tags)
+                if !tags.isEmpty {
+                    if !lines.isEmpty { lines.append("") }
+                    lines.append(tags.map { "#\($0)" }.joined(separator: " "))
+                }
+            }
+            if format.includeSourceURL, let sourceURL {
+                if !lines.isEmpty { lines.append("") }
+                lines.append("<\(sourceURL.absoluteString)>")
+            }
+        }
+
         return lines.joined(separator: "\n") + "\n"
     }
 
@@ -46,23 +112,38 @@ enum MarkdownNoteBuilder {
         return lines.joined(separator: "\n")
     }
 
+    /// The vault-relative link for one attachment (方案 §19). Capture notes always sit one
+    /// directory below the vault root, so the plain-Markdown style needs the `../` climb;
+    /// Obsidian embeds resolve from the vault root on their own.
+    private static func embedLine(for attachment: SavedAttachment, style: ImageLinkStyle) -> String {
+        let alt = String(localized: "Original image")
+        switch style {
+        case .markdown:
+            return "![\(alt)](../\(attachment.relativePath))"
+        case .obsidian:
+            return "![[\(attachment.relativePath)]]"
+        }
+    }
+
     private static func frontmatter(for note: GeneratedNote,
                                     sourceURL: URL?,
+                                    includeTags: Bool,
+                                    includeCreatedAt: Bool,
                                     date: Date) -> [String] {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var lines = ["---", "created: \(formatter.string(from: date))", "tags:"]
-        let uniqueTags = note.tags.reduce(into: [String]()) { result, tag in
-            let value = tag.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty,
-                  !result.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame })
-            else { return }
-            result.append(value)
+        var lines = ["---"]
+        if includeCreatedAt {
+            lines.append("created: \(formatter.string(from: date))")
         }
-        if uniqueTags.isEmpty {
-            lines.append("  - ClipNest")
-        } else {
-            lines.append(contentsOf: uniqueTags.map { "  - \(yamlScalar($0))" })
+        if includeTags {
+            lines.append("tags:")
+            let uniqueTags = uniqueTags(note.tags)
+            if uniqueTags.isEmpty {
+                lines.append("  - ClipNest")
+            } else {
+                lines.append(contentsOf: uniqueTags.map { "  - \(yamlScalar($0))" })
+            }
         }
         lines.append("source: clipboard")
         if let sourceURL {
@@ -70,6 +151,16 @@ enum MarkdownNoteBuilder {
         }
         lines.append("---")
         return lines
+    }
+
+    private static func uniqueTags(_ tags: [String]) -> [String] {
+        tags.reduce(into: [String]()) { result, tag in
+            let value = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty,
+                  !result.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame })
+            else { return }
+            result.append(value)
+        }
     }
 
     private static func quote(_ text: String) -> [String] {

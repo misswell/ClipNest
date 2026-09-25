@@ -12,6 +12,10 @@ struct GeneratedNote: Codable, Equatable {
 /// Editable form used by the confirmation workflow. The original clipboard payload and
 /// hash stay attached so saving a modified preview still produces a complete note and marks
 /// the correct clipboard item as handled.
+///
+/// The capture's images and the note format that produced the draft travel with it (方案 §29):
+/// the preview shows only the sections the format enables, and saving replays the same
+/// attachment transaction an automatic save would have taken.
 struct GeneratedNoteDraft: Identifiable, Equatable {
     let id: UUID
     var title: String
@@ -23,8 +27,12 @@ struct GeneratedNoteDraft: Identifiable, Equatable {
     let originalText: String
     let contentKind: ClipboardContentKind
     let clipboardHash: String
+    let format: NoteFormatConfiguration
+    let images: [CapturedImage]
 
-    init(note: GeneratedNote, snapshot: ClipboardSnapshot) {
+    init(note: GeneratedNote,
+         snapshot: ClipboardSnapshot,
+         format: NoteFormatConfiguration = .default) {
         id = UUID()
         title = note.title
         summary = note.summary
@@ -35,6 +43,16 @@ struct GeneratedNoteDraft: Identifiable, Equatable {
         originalText = snapshot.content.rawText
         contentKind = snapshot.content.kind
         clipboardHash = snapshot.hash
+        self.format = format
+        images = snapshot.images
+    }
+
+    /// The captured material this draft saves, unchanged from the capture itself.
+    var captured: CapturedContent {
+        CapturedContent(text: originalText,
+                        sourceURL: sourceURL,
+                        sourceKind: .clipboard,
+                        images: images)
     }
 
     var note: GeneratedNote {
