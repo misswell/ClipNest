@@ -116,6 +116,19 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.tertiaryinfotech.clipnest.devicetests
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ClipNest.app/ClipNest"
 
+  ClipNestUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - UITests
+    dependencies:
+      - target: ClipNest
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tertiaryinfotech.clipnest.uitests
+        TEST_TARGET_NAME: ClipNest
+
 schemes:
   ClipNest:
     build:
@@ -137,3 +150,17 @@ schemes:
       config: Debug
       targets:
         - name: ClipNestDeviceTests
+
+  # `xcodebuild test -scheme ClipNestUI -destination 'platform=iOS Simulator,…'` — the
+  # navigation-experience regressions (delete → back to the list, tab return must not
+  # re-push the last note). UI tests need their own scheme: the unit-test scheme is
+  # macOS-only and a mixed-destination scheme cannot run.
+  ClipNestUI:
+    build:
+      targets:
+        ClipNest: all
+        ClipNestUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - name: ClipNestUITests

@@ -161,7 +161,11 @@ private struct VaultNavigationHost: View {
         )
         .task {
             store.restoreVaultIfNeeded()
-            navigationSelection = store.selectedFileURL
+            // Deliberately no sync from `store.selectedFileURL` here: this task re-runs every
+            // time the tab re-appears, and re-applying the last selection pushed the last-opened
+            // note back into detail on every return to the tab ("tapping the home tab opens a
+            // note"). Service-driven opens ride on the bridge's change observation below; the
+            // bridge's one-time initial sync covers a selection made before this host existed.
             // Warm the on-device model while the user is browsing, so the first capture does
             // not pay the load. A no-op in online mode, with no model installed, or when the
             // preload setting is off.
@@ -375,15 +379,20 @@ private struct VaultSidebar: View, Equatable {
 
 /// Observes the service selection without making VaultView observe it. User taps update the
 /// local navigation state first, so this only handles selections made by background services.
+/// The initial sync runs exactly once: the host re-appears on every tab switch, and re-applying
+/// the selection there pushed the last-opened note back into detail on each return to the tab.
 private struct VaultSelectionNavigationBridge: View {
     @ObservedObject var selection: VaultSelection
     @Binding var navigationSelection: URL?
     @Binding var requestedIntent: NoteOpenIntent
+    @State private var hasDoneInitialSync = false
 
     var body: some View {
         Color.clear
             .frame(width: 0, height: 0)
             .onAppear {
+                guard !hasDoneInitialSync else { return }
+                hasDoneInitialSync = true
                 sync()
             }
             .onChange(of: selection.fileURL) { _, _ in

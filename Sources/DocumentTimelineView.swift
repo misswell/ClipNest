@@ -48,6 +48,16 @@ struct DocumentTimelineView: View {
                 MarkdownEditorView(url: url, intent: .view)
             }
         }
+        .background(
+            // Deleting the open note clears the store selection; this timeline owns its own
+            // navigation stack, so without this watcher the deleted note's editor would stay
+            // pushed here while only the Vault tab reacted. Pop back to the list instead.
+            SelectionClearWatcher(selection: store.selection) {
+                if !navigationPath.isEmpty {
+                    navigationPath = NavigationPath()
+                }
+            }
+        )
         .task {
             store.restoreVaultIfNeeded()
         }
@@ -121,6 +131,24 @@ struct DocumentTimelineView: View {
         let filePath = url.standardizedFileURL.path
         guard filePath.hasPrefix(rootPath + "/") else { return url.lastPathComponent }
         return String(filePath.dropFirst(rootPath.count + 1))
+    }
+}
+
+/// Watches the store selection for a clear (a delete of the open note) and reports it, so the
+/// owning surface can pop its own navigation stack back to the list. Selection is deliberately
+/// a separate ObservableObject, so the watched object is passed in rather than reached through
+/// the store's environment object.
+private struct SelectionClearWatcher: View {
+    @ObservedObject var selection: VaultSelection
+    let onCleared: () -> Void
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onChange(of: selection.fileURL) { _, newURL in
+                guard newURL == nil else { return }
+                onCleared()
+            }
     }
 }
 
