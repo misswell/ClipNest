@@ -5,13 +5,15 @@ import Foundation
 /// The shape is no longer hardcoded (方案 §15, §16): every section exists only when the
 /// `NoteFormatConfiguration` asks for it and the material for it exists. Headings are
 /// minimal by rule (方案 §16) — a note that is just a title and a body gets no `##` chrome
-/// at all; the old behaviour of always appending `## 原始内容` is gone.
+/// at all; the old behaviour of always appending `## 原始内容` is gone. When the capture
+/// itself is a picture, the picture — not its OCR transcription — occupies the source slot.
 enum MarkdownNoteBuilder {
     static func make(note: GeneratedNote,
                      originalContent: ClipboardContent,
                      format: NoteFormatConfiguration = .default,
                      attachments: [SavedAttachment] = [],
-                     date: Date = Date()) -> String {
+                     date: Date = Date(),
+                     sourceKind: CaptureSourceKind = .clipboard) -> String {
         var lines: [String] = []
 
         let sourceURL = note.sourceURL ?? originalContent.sourceURL
@@ -34,6 +36,13 @@ enum MarkdownNoteBuilder {
             : ""
         let originalText = originalContent.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // When the capture *is* a picture (photo or imported file) the OCR text is derived
+        // data: the source slot keeps the image itself, not its transcription. A clipboard
+        // capture that merely carries an image still keeps its own text as the source, and
+        // with image saving turned off the transcription is all there is to keep.
+        let embedLines = attachments.map { embedLine(for: $0, style: format.imageLinkStyle) }
+        let originalIsImage = sourceKind != .clipboard && !embedLines.isEmpty
+
         // The body: the model's organized text when the format wants one. When the body slot
         // ends up empty anyway — a provider that answered without its body — the source takes
         // the slot: a title-only note is a worse outcome than the text the user captured. A
@@ -41,8 +50,14 @@ enum MarkdownNoteBuilder {
         var body = format.generatesBody
             ? note.content.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
+        var sourceIsInTheBody = false
         if body.isEmpty, format.generatesBody || format.includeOriginalText {
-            body = originalText
+            if originalIsImage {
+                body = embedLines.joined(separator: "\n\n")
+                sourceIsInTheBody = true
+            } else {
+                body = originalText
+            }
         }
 
         if !summary.isEmpty {
@@ -58,7 +73,12 @@ enum MarkdownNoteBuilder {
             }
         }
 
-        if format.includeOriginalImage {
+        // The embeds are placed exactly once. When the capture is an image the picture *is*
+        // the source material, so it renders in the source slot (as the body, or as the
+        // section below next to an organized body) instead of being appended here.
+        let embedsLiveInTheSourceSlot = originalIsImage
+            && (sourceIsInTheBody || format.includeOriginalText)
+        if format.includeOriginalImage, !embedsLiveInTheSourceSlot {
             for attachment in attachments {
                 if !lines.isEmpty { lines.append("") }
                 lines.append(embedLine(for: attachment, style: format.imageLinkStyle))
@@ -67,13 +87,21 @@ enum MarkdownNoteBuilder {
 
         // The source is quoted as its own section only when it is *not* already the body —
         // that distinction is what "keep the original text" means next to an organized body
-        // (方案 §16).
-        if format.includeOriginalText,
-           !originalText.isEmpty,
-           originalText != body {
-            if !lines.isEmpty { lines.append("") }
-            lines.append(contentsOf: ["## 原始内容", ""])
-            lines.append(contentsOf: quote(originalContent.text))
+        // (方案 §16). For an image capture the section keeps the picture; the OCR text is
+        // derived and is never quoted back as "original".
+        if format.includeOriginalText {
+            if originalIsImage {
+                if !sourceIsInTheBody {
+                    if !lines.isEmpty { lines.append("") }
+                    lines.append(contentsOf: ["## 原始内容", ""])
+                    lines.append(contentsOf: embedLines)
+                }
+            } else if !originalText.isEmpty,
+               originalText != body {
+                if !lines.isEmpty { lines.append("") }
+                lines.append(contentsOf: ["## 原始内容", ""])
+                lines.append(contentsOf: quote(originalContent.text))
+            }
         }
 
         // Metadata that would have lived in the frontmatter degrades to inline lines when

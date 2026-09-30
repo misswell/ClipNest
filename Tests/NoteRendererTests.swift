@@ -26,12 +26,14 @@ final class NoteRendererTests: XCTestCase {
     private func render(_ format: NoteFormatConfiguration,
                         note: GeneratedNote? = nil,
                         attachments: [SavedAttachment] = [],
-                        date: Date = Date(timeIntervalSince1970: 0)) -> String {
+                        date: Date = Date(timeIntervalSince1970: 0),
+                        sourceKind: CaptureSourceKind = .clipboard) -> String {
         MarkdownNoteBuilder.make(note: note ?? self.note,
                                  originalContent: source,
                                  format: format,
                                  attachments: attachments,
-                                 date: date)
+                                 date: date,
+                                 sourceKind: sourceKind)
     }
 
     // MARK: - Case 1: 标题 + AI 正文 (方案 §35)
@@ -178,6 +180,54 @@ final class NoteRendererTests: XCTestCase {
         let markdown = render(.clean, attachments: [])
         XCTAssertFalse(markdown.contains("Attachments/"),
                        "no attachments were saved, so none are referenced")
+    }
+
+    // MARK: - Image captures: the picture is the source, not the OCR transcription
+
+    func testAnImageCapturePutsThePictureWhereTheSourceWouldGo() {
+        let markdown = render(.titleAndOriginal, attachments: attachments, sourceKind: .photo)
+
+        XCTAssertTrue(markdown.contains("](../Attachments/2026-09-25-a.jpg)"),
+                      "the picture takes the source's place as the body")
+        XCTAssertFalse(markdown.contains(sourceText),
+                       "the OCR transcription is not kept as the original content")
+        XCTAssertFalse(markdown.contains("## 原始内容"))
+        XCTAssertEqual(markdown.components(separatedBy: "Attachments/2026-09-25-a.jpg").count - 1, 1,
+                       "the embed is rendered exactly once")
+    }
+
+    func testAnImageCaptureWithAnOrganizedBodyQuotesThePictureNotTheTranscription() {
+        let markdown = render(.archive, attachments: attachments, sourceKind: .importedImage)
+
+        XCTAssertTrue(markdown.contains("## 正文"))
+        let originalRange = markdown.range(of: "## 原始内容")!
+        let embedRange = markdown.range(of: "Attachments/2026-09-25-a.jpg")!
+        XCTAssertTrue(embedRange.lowerBound > originalRange.lowerBound,
+                      "the picture is the quoted source material")
+        XCTAssertFalse(markdown.contains("> \(sourceText.components(separatedBy: "\n")[0])"),
+                       "the OCR transcription is never quoted back as the original")
+        XCTAssertEqual(markdown.components(separatedBy: "Attachments/2026-09-25-a.jpg").count - 1, 1,
+                       "no trailing duplicate of the embed")
+    }
+
+    func testAClipboardCaptureThatCarriesAnImageKeepsTheTextAsTheSource() {
+        let markdown = render(.archive, attachments: attachments, sourceKind: .clipboard)
+
+        XCTAssertTrue(markdown.contains("> \(sourceText.components(separatedBy: "\n")[0])"),
+                      "clipboard text is still the original content")
+        let imageRange = markdown.range(of: "Attachments/2026-09-25-a.jpg")!
+        let originalRange = markdown.range(of: "## 原始内容")!
+        XCTAssertTrue(imageRange.lowerBound < originalRange.lowerBound,
+                      "an accompanying image still trails the note, before the quote")
+    }
+
+    func testAnImageCaptureWithImageSavingOffFallsBackToTheTranscription() {
+        var format = NoteFormatConfiguration.titleAndOriginal
+        format.includeOriginalImage = false
+        let markdown = render(format, attachments: [], sourceKind: .photo)
+
+        XCTAssertTrue(markdown.contains(sourceText),
+                      "with the picture not saved, the transcription is all there is to keep")
     }
 
     // MARK: - Title fallback

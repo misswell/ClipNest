@@ -1,3 +1,4 @@
+import CoreGraphics
 import SwiftUI
 
 #if canImport(UIKit)
@@ -43,6 +44,39 @@ extension PlatformImage {
         #elseif canImport(AppKit)
         guard let cgImage = ocrCGImage else { return nil }
         let representation = NSBitmapImageRep(cgImage: cgImage)
+        return representation.representation(using: .jpeg,
+                                             properties: [.compressionFactor: compressionQuality])
+        #else
+        return nil
+        #endif
+    }
+
+    /// JPEG encoding for what lands in the vault. JPEG cannot carry alpha, and the platform
+    /// encoders composite transparent regions onto black — a transparent-window screenshot
+    /// would be stored with a black background. The picture is therefore drawn over white
+    /// first, at its own pixel dimensions, and only then encoded.
+    func jpegDataForStorage(compressionQuality: Double) -> Data? {
+        guard let cgImage = ocrCGImage, cgImage.width > 0, cgImage.height > 0 else { return nil }
+        let canvas = CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
+        guard let context = CGContext(data: nil,
+                                      width: cgImage.width,
+                                      height: cgImage.height,
+                                      bitsPerComponent: 8,
+                                      bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)
+                                          ?? cgImage.colorSpace
+                                          ?? CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
+            return nil
+        }
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(canvas)
+        context.draw(cgImage, in: canvas)
+        guard let flattened = context.makeImage() else { return nil }
+        #if canImport(UIKit)
+        return UIImage(cgImage: flattened).jpegData(compressionQuality: compressionQuality)
+        #elseif canImport(AppKit)
+        let representation = NSBitmapImageRep(cgImage: flattened)
         return representation.representation(using: .jpeg,
                                              properties: [.compressionFactor: compressionQuality])
         #else

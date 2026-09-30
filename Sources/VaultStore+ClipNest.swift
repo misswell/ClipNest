@@ -174,7 +174,8 @@ extension VaultStore {
                                                 originalContent: originalContent,
                                                 format: format,
                                                 attachments: savedAttachments,
-                                                date: date)
+                                                date: date,
+                                                sourceKind: captured.sourceKind)
         do {
             try await writeClipNest(markdown, to: url)
         } catch {

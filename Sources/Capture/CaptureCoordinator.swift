@@ -480,8 +480,10 @@ final class CaptureCoordinator: ObservableObject {
     /// coordinate iCloud placeholders and coordinated access to *vault* bytes, and this file is
     /// outside the vault, chosen by the user through a system panel that already grants access.
     ///
-    /// The imported bytes are kept as-is for the attachment: re-encoding a screenshot or a
-    /// photo only loses fidelity (方案 §19).
+    /// The file is re-encoded into the vault's storage format (see
+    /// `storageCompressionQuality`); the original bytes are kept only as the fallback for the
+    /// unlikely case the re-encode fails, so an unreadable-for-encoding pick never loses the
+    /// picture entirely.
     func captureImportedImage(at url: URL) async {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -491,39 +493,45 @@ final class CaptureCoordinator: ObservableObject {
             errorMessage = String(localized: "That file could not be opened as an image.")
             return
         }
-        await capturePhoto(image, sourceImage: CapturedImage(data: data,
-                                                             preferredExtension: url.pathExtension))
+        await runPhotoCapture(image,
+                              sourceKind: .importedImage,
+                              fallbackAttachment: CapturedImage(data: data,
+                                                                preferredExtension: url.pathExtension))
     }
 
     /// Records a photo: recognize its text on device and organize it into a note.
     /// Cross-platform — the Mac path uses the same Vision code as the phone.
     func capturePhoto(_ image: PlatformImage) async {
-        await capturePhoto(image, sourceImage: nil)
+        await runPhotoCapture(image, sourceKind: .photo)
     }
 
-    private func capturePhoto(_ image: PlatformImage,
-                              sourceImage: CapturedImage?) async {
+    private func runPhotoCapture(_ image: PlatformImage,
+                                 sourceKind: CaptureSourceKind,
+                                 fallbackAttachment: CapturedImage? = nil) async {
         guard !isRunning else { return }
         bannerTask?.cancel()
         isRunning = true
         errorMessage = nil
         showsStatusBanner = true
-        await finishPhotoCapture(image, sourceImage: sourceImage)
+        await finishPhotoCapture(image,
+                                 sourceKind: sourceKind,
+                                 fallbackAttachment: fallbackAttachment)
     }
 
     private func finishPhotoCapture(_ image: PlatformImage,
-                                    sourceImage: CapturedImage?) async {
+                                    sourceKind: CaptureSourceKind,
+                                    fallbackAttachment: CapturedImage? = nil) async {
         state = .analyzing
         statusMessage = String(localized: "Recognizing text in photo…")
         let ocrResult = await recognizeText(in: image)
         let ocrText = OCRPostProcessor.process(ocrResult.text)
 
-        // The image travels with the capture all the way to the save transaction (方案 §21);
-        // whether it is *written* is decided by the format at save time. Photos taken in-app
-        // have no original bytes, so they are encoded once here; an imported file arrives
-        // with its own bytes and skips the re-encode.
-        let attachmentImage = sourceImage ?? Self.encodedAttachmentImage(from: image)
-        let sourceKind: CaptureSourceKind = sourceImage == nil ? .photo : .importedImage
+        // Every attachment is stored in one format — JPEG at `storageCompressionQuality` —
+        // whether it came from the camera, the photo library or an imported file, so a vault
+        // of captures does not balloon with multi-megabyte PNGs and camera originals. The
+        // image travels with the capture all the way to the save transaction (方案 §21);
+        // whether it is *written* is decided by the format at save time.
+        let attachmentImage = Self.encodedAttachmentImage(from: image) ?? fallbackAttachment
         let images = attachmentImage.map { [$0] } ?? []
 
         // A separate image model is only ever considered when the mode allows a network
@@ -591,10 +599,19 @@ final class CaptureCoordinator: ObservableObject {
         await generateAndSave(snapshot)
     }
 
-    /// Encodes an in-app photo for the vault attachment. Imported files keep their original
-    /// bytes; only this path re-encodes.
+    /// The fixed JPEG quality attachments are stored at. Half quality keeps screenshots and
+    /// photos at a fraction of their original size while staying readable, which is the whole
+    /// trade the storage format makes.
+    private static let storageCompressionQuality: Double = 0.5
+
+    /// Encodes any capture image into the vault storage format: JPEG at
+    /// `storageCompressionQuality`, flattened onto white first (see
+    /// `jpegDataForStorage`). Imported files keep their original bytes only as the caller's
+    /// fallback when this encode fails.
     private static func encodedAttachmentImage(from image: PlatformImage) -> CapturedImage? {
-        guard let jpeg = image.jpegDataForUpload(compressionQuality: 0.9) else { return nil }
+        guard let jpeg = image.jpegDataForStorage(compressionQuality: storageCompressionQuality) else {
+            return nil
+        }
         return CapturedImage(data: jpeg, preferredExtension: "jpg")
     }
 

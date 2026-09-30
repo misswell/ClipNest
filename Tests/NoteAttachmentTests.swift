@@ -46,8 +46,8 @@ final class NoteAttachmentTests: XCTestCase {
                                                     format: .default)
 
         let markdown = try String(contentsOf: url, encoding: .utf8)
-        XCTAssertTrue(markdown.contains("OCR 出来的发票文字"),
-                      "the OCR text is the body (方案 §35 Case 6)")
+        XCTAssertFalse(markdown.contains("OCR 出来的发票文字"),
+                       "a photo capture keeps the picture as the source, not the OCR transcription")
 
         let attachmentsFolder = root.appendingPathComponent("Attachments", isDirectory: true)
         let files = try FileManager.default.contentsOfDirectory(at: attachmentsFolder,

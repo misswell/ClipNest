@@ -26,6 +26,7 @@ struct GeneratedNoteDraft: Identifiable, Equatable {
     var sourceURL: URL?
     let originalText: String
     let contentKind: ClipboardContentKind
+    let sourceKind: CaptureSourceKind
     let clipboardHash: String
     let format: NoteFormatConfiguration
     let images: [CapturedImage]
@@ -42,6 +43,7 @@ struct GeneratedNoteDraft: Identifiable, Equatable {
         sourceURL = note.sourceURL ?? snapshot.content.sourceURL
         originalText = snapshot.content.rawText
         contentKind = snapshot.content.kind
+        sourceKind = snapshot.sourceKind
         clipboardHash = snapshot.hash
         self.format = format
         images = snapshot.images
@@ -51,7 +53,7 @@ struct GeneratedNoteDraft: Identifiable, Equatable {
     var captured: CapturedContent {
         CapturedContent(text: originalText,
                         sourceURL: sourceURL,
-                        sourceKind: .clipboard,
+                        sourceKind: sourceKind,
                         images: images)
     }
 

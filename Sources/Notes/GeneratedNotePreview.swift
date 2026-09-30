@@ -42,7 +42,7 @@ struct GeneratedNotePreview: View {
                             .frame(minHeight: 260)
                             .font(.system(.body, design: .monospaced))
                     }
-                } else if !draft.images.isEmpty {
+                } else if !draft.images.isEmpty, !showsOriginalImages {
                     Section("Attachments") {
                         Label("\(draft.images.count)", systemImage: "photo.on.rectangle")
                             .font(.footnote)
@@ -61,16 +61,31 @@ struct GeneratedNotePreview: View {
                 }
 
                 if format.includeOriginalText {
-                    Section("Original Clipboard") {
-                        DisclosureGroup("View Original") {
-                            Text(draft.originalText)
-                                .font(.system(.footnote, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                    if showsOriginalImages {
+                        Section("Original Image") {
+                            ForEach(draft.images.indices, id: \.self) { index in
+                                if let thumbnail = Image(platformData: draft.images[index].data) {
+                                    thumbnail
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(maxHeight: 220)
+                                        .frame(maxWidth: .infinity)
+                                        .listRowBackground(Color.clear)
+                                }
+                            }
                         }
-                        Text("Type: \(draft.contentKind.title)")
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedInk)
+                    } else {
+                        Section("Original Clipboard") {
+                            DisclosureGroup("View Original") {
+                                Text(draft.originalText)
+                                    .font(.system(.footnote, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            Text("Type: \(draft.contentKind.title)")
+                                .font(.caption)
+                                .foregroundStyle(Theme.mutedInk)
+                        }
                     }
                 }
             }
@@ -88,6 +103,16 @@ struct GeneratedNotePreview: View {
                 }
             }
         }
+    }
+
+    /// Whether the original section can show the captured picture itself: the capture *is*
+    /// an image (photo or imported file), the format keeps the original material, and the
+    /// picture bytes are still in memory. Mirrors the renderer's rule that the picture, not
+    /// the OCR transcription, occupies the source slot.
+    private var showsOriginalImages: Bool {
+        format.includeOriginalText
+            && draft.sourceKind != .clipboard
+            && !draft.images.isEmpty
     }
 
     /// A draft is saveable when it has a title and *something* to render — with the body
