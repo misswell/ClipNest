@@ -26,6 +26,11 @@ final class NavigationUXTests: XCTestCase {
         }
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5),
                       "the main tab bar should be visible")
+        // A fresh install seeds the sample vault and auto-opens its Welcome note. Go back
+        // to the tree, so every test starts from the list regardless of install state.
+        if app.navigationBars["Welcome"].waitForExistence(timeout: 3) {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
     }
 
     // MARK: - Bug: delete must return to the list (Vault tab)
@@ -102,6 +107,41 @@ final class NavigationUXTests: XCTestCase {
                        "returning to the Vault tab must not push the last-opened note")
         XCTAssertTrue(app.buttons["Getting Started.md"].waitForExistence(timeout: 5),
                       "the list the user left is still showing")
+    }
+
+    // MARK: - Image viewer: tapping a preview image opens it full screen
+
+    func testTappingAPreviewImageOpensTheFullScreenViewer() throws {
+        // A fresh install seeds the sample vault and auto-opens its Welcome note; otherwise
+        // open Welcome.md from the tree.
+        if !app.navigationBars["Welcome"].waitForExistence(timeout: 3) {
+            let row = app.buttons["Welcome.md"]
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            row.tap()
+        }
+        XCTAssertTrue(app.navigationBars["Welcome"].waitForExistence(timeout: 5))
+
+        // Welcome.md opens in Preview and embeds the sample banner. It sits below the fold
+        // of the lazy preview stack, so scroll until the element materializes.
+        let image = app.descendants(matching: .any)["View Full Image"].firstMatch
+        var attempts = 0
+        while !image.exists, attempts < 8 {
+            app.swipeUp()
+            attempts += 1
+        }
+        XCTAssertTrue(image.waitForExistence(timeout: 3),
+                      "the embedded banner should render in the preview")
+        while image.exists && !image.isHittable, attempts < 12 {
+            app.swipeUp()
+            attempts += 1
+        }
+        image.tap()
+
+        XCTAssertTrue(app.buttons["Close Image Viewer"].waitForExistence(timeout: 5),
+                      "the full-screen viewer should open")
+        app.buttons["Close Image Viewer"].tap()
+        XCTAssertFalse(app.buttons["Close Image Viewer"].waitForExistence(timeout: 2),
+                       "closing returns to the note preview")
     }
 
     // MARK: - Helpers

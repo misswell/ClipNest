@@ -20,6 +20,8 @@ struct MarkdownPreview: View {
     /// typing in this note" (safe to debounce and keep the old body on screen) apart from "the
     /// host switched to another note" (must clear immediately, never show the previous note).
     @State private var renderedDocument: URL?
+    /// The image the user tapped for a full-screen preview. `nil` = closed.
+    @State private var viewerTarget: NoteImageTarget?
 
     /// Coalesces a typing burst so only the version the user pauses on is parsed.
     private static let parseDebounceNanoseconds: UInt64 = 140_000_000
@@ -51,6 +53,16 @@ struct MarkdownPreview: View {
             }
         }
         .background(Theme.background)
+        #if os(iOS)
+        .fullScreenCover(item: $viewerTarget) { target in
+            NoteImageViewer(target: target)
+        }
+        #else
+        .sheet(item: $viewerTarget) { target in
+            NoteImageViewer(target: target)
+                .frame(minWidth: 640, minHeight: 480)
+        }
+        #endif
         .task(id: RenderKey(markdown: markdown, document: documentURL)) {
             let renderRequest = renderRequestGate.begin()
             if renderedDocument == documentURL {
@@ -158,26 +170,43 @@ struct MarkdownPreview: View {
     private func imageView(alt: String, src: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             if src.hasPrefix("http"), let url = URL(string: src) {
-                AsyncImage(url: url) { phase in
-                    if let img = phase.image {
-                        img.resizable().scaledToFit()
-                    } else if phase.error != nil {
-                        imagePlaceholder(src)
-                    } else {
-                        ProgressView().frame(maxWidth: .infinity, minHeight: 80)
+                Button {
+                    viewerTarget = NoteImageTarget(source: src, remoteURL: url)
+                } label: {
+                    AsyncImage(url: url) { phase in
+                        if let img = phase.image {
+                            img.resizable().scaledToFit()
+                        } else if phase.error != nil {
+                            imagePlaceholder(src)
+                        } else {
+                            ProgressView().frame(maxWidth: .infinity, minHeight: 80)
+                        }
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .buttonStyle(.plain)
+                .accessibilityLabel("View Full Image")
+                .accessibilityIdentifier("View Full Image")
             } else if vaultRootURL != nil {
                 // The fallback filename search can walk a large vault. Keep it out of
                 // SwiftUI body evaluation and let the image row resolve it asynchronously.
                 LocalMarkdownImageView(source: src,
                                        documentURL: documentURL,
-                                       vaultRootURL: vaultRootURL)
+                                       vaultRootURL: vaultRootURL) { resolvedURL, loaded in
+                    viewerTarget = NoteImageTarget(source: src,
+                                                   localURL: resolvedURL,
+                                                   documentURL: documentURL,
+                                                   vaultRootURL: vaultRootURL,
+                                                   placeholder: loaded)
+                }
             } else if let url = resolveImage(src) {
                 // Preserve the lightweight standalone-preview behavior when no vault
                 // context is available.
-                LocalMarkdownImageView(url: url, source: src)
+                LocalMarkdownImageView(url: url, source: src) { resolvedURL, loaded in
+                    viewerTarget = NoteImageTarget(source: src,
+                                                   localURL: resolvedURL,
+                                                   placeholder: loaded)
+                }
             } else {
                 imagePlaceholder(src)
             }
@@ -305,25 +334,31 @@ private enum MarkdownPreviewRenderer {
 }
 
 /// Resolves and reads local attachments away from the main actor so an image-heavy note
-/// does not stall the transition into its detail view.
+/// does not stall the transition into its detail view. When the image finishes loading,
+/// `onOpen` fires with the resolved file and the decoded image — the tap affordance for the
+/// full-screen viewer is attached only then, so a missing image is never tappable.
 private struct LocalMarkdownImageView: View {
     let url: URL?
     let source: String
     let documentURL: URL?
     let vaultRootURL: URL?
+    var onOpen: ((URL, PlatformImage) -> Void)? = nil
 
     @State private var image: PlatformImage?
+    @State private var resolvedURL: URL?
     @State private var didFinishLoading = false
     @State private var loadRequestGate = PreviewRequestGate()
 
     init(url: URL? = nil,
          source: String,
          documentURL: URL? = nil,
-         vaultRootURL: URL? = nil) {
+         vaultRootURL: URL? = nil,
+         onOpen: ((URL, PlatformImage) -> Void)? = nil) {
         self.url = url
         self.source = source
         self.documentURL = documentURL
         self.vaultRootURL = vaultRootURL
+        self.onOpen = onOpen
     }
 
     var body: some View {
@@ -332,6 +367,14 @@ private struct LocalMarkdownImageView: View {
                 Image(platformImage: image).resizable()
                     .scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .onTapGesture {
+                        if let onOpen, let resolvedURL {
+                            onOpen(resolvedURL, image)
+                        }
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel("View Full Image")
+                    .accessibilityIdentifier("View Full Image")
             } else if didFinishLoading {
                 HStack(spacing: 8) {
                     Image(systemName: "photo")
@@ -352,19 +395,20 @@ private struct LocalMarkdownImageView: View {
             let loadRequest = loadRequestGate.begin()
             didFinishLoading = false
             image = nil
+            resolvedURL = nil
 
-            var resolvedURL = url
-            if resolvedURL == nil, let rootURL = vaultRootURL {
+            var resolved = url
+            if resolved == nil, let rootURL = vaultRootURL {
                 let sourceCopy = source
                 let documentURLCopy = documentURL
-                resolvedURL = await Task.detached(priority: .utility) {
+                resolved = await Task.detached(priority: .utility) {
                     VaultStore.resolveImageURL(sourceCopy,
                                                relativeTo: documentURLCopy,
                                                rootURL: rootURL)
                 }.value
             }
 
-            guard loadRequestGate.accepts(loadRequest), let resolvedURL else {
+            guard loadRequestGate.accepts(loadRequest), let resolved else {
                 didFinishLoading = true
                 return
             }
@@ -372,10 +416,11 @@ private struct LocalMarkdownImageView: View {
             // Reads through the vault access layer (iCloud placeholders download) and the
             // shared cache, and downsamples to the size a note actually displays.
             let decoded = await VaultImageLoader.image(
-                for: resolvedURL,
+                for: resolved,
                 maxPixelSize: VaultImageLoader.inlineMaxPixelSize)
             guard loadRequestGate.accepts(loadRequest) else { return }
             image = decoded
+            resolvedURL = resolved
             didFinishLoading = true
         }
     }
