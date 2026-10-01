@@ -1,4 +1,5 @@
 import CoreGraphics
+import ImageIO
 import XCTest
 @testable import ClipNest
 
@@ -38,6 +39,51 @@ final class ImageStorageTests: XCTestCase {
         let stored = try XCTUnwrap(image.jpegDataForStorage(compressionQuality: 0.5))
         XCTAssertLessThan(Double(stored.count), Double(full.count) * 0.9,
                           "half-quality storage encoding must actually save space")
+    }
+
+    /// A camera photo's sensor pixels rarely match how the photo displays: the EXIF
+    /// orientation carries the rotation. The stored JPEG must come out exactly as the
+    /// original displays — rotated pixels baked in, not sideways sensor output.
+    func testStorageEncodingKeepsThePhotoOrientation() throws {
+        // A 100×60 landscape bitmap tagged "rotate 90° CW on display" (EXIF 6): it shows
+        // as a 60×100 portrait.
+        let bitmap = Self.makeSolidImage(width: 100, height: 60)
+        let orientedJPEG = try Self.writeJPEG(bitmap, exifOrientation: 6)
+
+        let source = try XCTUnwrap(PlatformImage(data: orientedJPEG))
+        let stored = try XCTUnwrap(source.jpegDataForStorage(compressionQuality: 0.5))
+
+        let decoded = try XCTUnwrap(PlatformImage(data: stored))
+        let pixels = try XCTUnwrap(decoded.ocrCGImage)
+        XCTAssertEqual(pixels.width, 60, "the stored pixels must match the original's display orientation")
+        XCTAssertEqual(pixels.height, 100)
+    }
+
+    private static func makeSolidImage(width: Int, height: Int) -> CGImage {
+        let context = CGContext(data: nil,
+                                width: width,
+                                height: height,
+                                bitsPerComponent: 8,
+                                bytesPerRow: 0,
+                                space: CGColorSpaceCreateDeviceRGB(),
+                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(CGColor(red: 0.6, green: 0.2, blue: 0.9, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()!
+    }
+
+    /// Encodes a bitmap as JPEG carrying an EXIF display orientation, like camera output.
+    private static func writeJPEG(_ cgImage: CGImage, exifOrientation: Int) throws -> Data {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil) else {
+            throw NSError(domain: "ImageStorageTests", code: 1)
+        }
+        CGImageDestinationAddImage(destination, cgImage,
+                                   [kCGImagePropertyOrientation: exifOrientation] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else {
+            throw NSError(domain: "ImageStorageTests", code: 2)
+        }
+        return data as Data
     }
 
     /// Deterministic noise: the worst case for JPEG, so the quality saving it shows here is

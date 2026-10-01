@@ -51,31 +51,52 @@ extension PlatformImage {
         #endif
     }
 
-    /// JPEG encoding for what lands in the vault. JPEG cannot carry alpha, and the platform
-    /// encoders composite transparent regions onto black — a transparent-window screenshot
-    /// would be stored with a black background. The picture is therefore drawn over white
-    /// first, at its own pixel dimensions, and only then encoded.
+    /// JPEG encoding for what lands in the vault. The picture is drawn through the platform
+    /// image first — a raw `cgImage` carries sensor pixels without the EXIF orientation, so
+    /// encoding from it stored camera photos sideways. Drawing bakes the orientation in, and
+    /// the white backing flattens alpha (which JPEG cannot carry) instead of the encoders'
+    /// black. Encoding happens at the image's oriented pixel size.
     func jpegDataForStorage(compressionQuality: Double) -> Data? {
-        guard let cgImage = ocrCGImage, cgImage.width > 0, cgImage.height > 0 else { return nil }
-        let canvas = CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
+        #if canImport(UIKit)
+        let orientedSize = size
+        guard orientedSize.width > 0, orientedSize.height > 0 else { return nil }
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = true
+        format.scale = 1
+        let rendered = UIGraphicsImageRenderer(size: orientedSize, format: format).image { _ in
+            UIColor.white.setFill()
+            UIRectFill(CGRect(origin: .zero, size: orientedSize))
+            draw(in: CGRect(origin: .zero, size: orientedSize))
+        }
+        return rendered.jpegData(compressionQuality: compressionQuality)
+        #elseif canImport(AppKit)
+        let orientedSize = size
+        guard orientedSize.width > 0, orientedSize.height > 0 else { return nil }
+        // Target pixels: the raw bitmap's resolution, swapped when the image is rotated
+        // (`size` is orientation-aware, the raw `cgImage` is not).
+        let rawSize = ocrCGImage.map { CGSize(width: $0.width, height: $0.height) } ?? orientedSize
+        let sameAspect = (orientedSize.width > orientedSize.height) == (rawSize.width > rawSize.height)
+        let pixelSize = sameAspect ? rawSize : CGSize(width: rawSize.height, height: rawSize.width)
+        let canvas = CGRect(origin: .zero, size: pixelSize)
         guard let context = CGContext(data: nil,
-                                      width: cgImage.width,
-                                      height: cgImage.height,
+                                      width: max(1, Int(pixelSize.width)),
+                                      height: max(1, Int(pixelSize.height)),
                                       bitsPerComponent: 8,
                                       bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)
-                                          ?? cgImage.colorSpace
                                           ?? CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
             return nil
         }
+        // Draw the NSImage itself (not its raw cgImage) so the EXIF orientation is baked
+        // into the pixels, over a white backing for the alpha JPEG cannot carry.
         context.setFillColor(CGColor(gray: 1, alpha: 1))
         context.fill(canvas)
-        context.draw(cgImage, in: canvas)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        draw(in: NSRect(origin: .zero, size: pixelSize))
+        NSGraphicsContext.restoreGraphicsState()
         guard let flattened = context.makeImage() else { return nil }
-        #if canImport(UIKit)
-        return UIImage(cgImage: flattened).jpegData(compressionQuality: compressionQuality)
-        #elseif canImport(AppKit)
         let representation = NSBitmapImageRep(cgImage: flattened)
         return representation.representation(using: .jpeg,
                                              properties: [.compressionFactor: compressionQuality])
