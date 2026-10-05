@@ -33,6 +33,17 @@ final class NavigationUXTests: XCTestCase {
         }
     }
 
+    override func tearDownWithError() throws {
+        if testRun?.hasSucceeded == false {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
+    }
+
     // MARK: - Bug: delete must return to the list (Vault tab)
 
     func testDeletingTheOpenNoteReturnsToTheList() throws {
@@ -116,7 +127,16 @@ final class NavigationUXTests: XCTestCase {
         // open Welcome.md from the tree.
         if !app.navigationBars["Welcome"].waitForExistence(timeout: 3) {
             let row = app.buttons["Welcome.md"]
+            var scrolls = 0
+            while !row.exists, scrolls < 8 {
+                app.swipeUp()
+                scrolls += 1
+            }
             XCTAssertTrue(row.waitForExistence(timeout: 5))
+            while !row.isHittable, scrolls < 12 {
+                app.swipeUp()
+                scrolls += 1
+            }
             row.tap()
         }
         XCTAssertTrue(app.navigationBars["Welcome"].waitForExistence(timeout: 5))
@@ -145,6 +165,123 @@ final class NavigationUXTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    func testNoteDetailsBookmarkAndPropertiesAreEditable() throws {
+        let name = "Details \(UUID().uuidString.prefix(6)).md"
+        try createNote(name)
+        XCTAssertTrue(app.navigationBars[title(of: name)].waitForExistence(timeout: 5))
+        app.buttons["More"].tap()
+        app.buttons["Note Details"].tap()
+        XCTAssertTrue(app.navigationBars["Note Details"].waitForExistence(timeout: 5))
+        app.buttons["Add Bookmark"].tap()
+        XCTAssertTrue(app.buttons["Remove Bookmark"].waitForExistence(timeout: 3))
+        app.buttons["Edit Properties"].tap()
+        let yaml = app.textViews.firstMatch
+        XCTAssertTrue(yaml.waitForExistence(timeout: 5))
+        yaml.tap(); yaml.typeText("aliases: [ReviewAlias]\ntags: [ui/test]\nstatus: active")
+        app.navigationBars.buttons["Save"].tap()
+        XCTAssertTrue(app.staticTexts["aliases, [ReviewAlias]"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons["Done"].tap()
+        XCTAssertTrue(app.navigationBars[title(of: name)].waitForExistence(timeout: 5))
+    }
+
+    func testDailyNoteOpensExistingNoteAndShowsDetails() throws {
+        app.tabBars.buttons["Knowledge"].tap()
+        XCTAssertTrue(app.navigationBars["Knowledge"].waitForExistence(timeout: 5))
+        app.buttons["Knowledge Actions"].tap()
+        app.buttons["Open Daily Note"].tap()
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"
+        XCTAssertTrue(app.navigationBars[formatter.string(from: Date())].waitForExistence(timeout: 10))
+        app.buttons["More"].tap(); app.buttons["Note Details"].tap()
+        XCTAssertTrue(app.navigationBars["Note Details"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Outline"].exists)
+    }
+
+    func testNewCanvasCreatesAnEditableCard() throws {
+        app.tabBars.buttons["Knowledge"].tap()
+        app.buttons["Knowledge Actions"].tap(); app.buttons["New Canvas"].tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 40))
+        let name = "Canvas-\(UUID().uuidString.prefix(6))"
+        field.typeText(name + ".canvas")
+        app.alerts.buttons["Create"].tap()
+        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
+        app.buttons["Add Card"].tap(); app.buttons["Text"].tap()
+        XCTAssertTrue(app.staticTexts["New card"].waitForExistence(timeout: 5))
+    }
+
+    func testInternalLinkCreatesMissingNoteAndNavigatesToIt() throws {
+        let name = "Links-\(UUID().uuidString.prefix(6)).md"
+        let missing = "Linked-\(UUID().uuidString.prefix(6))"
+        try createNote(name)
+        XCTAssertTrue(app.navigationBars[title(of: name)].waitForExistence(timeout: 5))
+        app.buttons["Edit"].tap()
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap()
+        editor.typeText("\n[[" + missing + "]]\n")
+        app.buttons["Preview"].tap()
+        let link = app.staticTexts[missing]
+        XCTAssertTrue(link.waitForExistence(timeout: 5))
+        link.tap()
+        XCTAssertTrue(app.alerts["Create Linked Note?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Create"].tap()
+        XCTAssertTrue(app.navigationBars[missing].waitForExistence(timeout: 5))
+    }
+
+    func testNewBaseListsNotesAndSavesAChangedView() throws {
+        app.tabBars.buttons["Knowledge"].tap()
+        app.buttons["Knowledge Actions"].tap(); app.buttons["New Base"].tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 40))
+        let name = "Base-\(UUID().uuidString.prefix(6))"
+        field.typeText(name + ".base"); app.alerts.buttons["Create"].tap()
+        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Getting Started"].waitForExistence(timeout: 15))
+        app.buttons["Edit Base"].tap()
+        let yaml = app.textViews.firstMatch
+        XCTAssertTrue(yaml.waitForExistence(timeout: 5))
+        yaml.tap(); yaml.press(forDuration: 1.1)
+        let selectAll = app.menuItems["Select All"]
+        if selectAll.waitForExistence(timeout: 2) { selectAll.tap() }
+        else { yaml.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 600)) }
+        yaml.typeText("filters: 'file.ext == \"md\"'\nviews:\n  - type: cards\n    name: Cards\n    order: [file.name]")
+        app.navigationBars.buttons["Save"].tap()
+        XCTAssertTrue(app.buttons["Getting Started"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.navigationBars["Edit Base"].exists)
+    }
+
+    func testInvalidNewNoteNameShowsAnError() throws {
+        try createNote("invalid/path")
+        XCTAssertTrue(app.alerts["File Operation Failed"].waitForExistence(timeout: 5))
+        app.alerts["File Operation Failed"].buttons["OK"].tap()
+        XCTAssertTrue(app.buttons["Getting Started.md"].waitForExistence(timeout: 5))
+    }
+
+    func testRenamingTheOpenNoteUpdatesItsTitleAndTreeRow() throws {
+        let original = "Rename \(UUID().uuidString.prefix(6)).md"
+        try createNote(original)
+        XCTAssertTrue(app.navigationBars[title(of: original)].waitForExistence(timeout: 5))
+        app.buttons["More"].tap()
+        let rename = app.buttons["Rename Note"]
+        XCTAssertTrue(rename.waitForExistence(timeout: 3))
+        rename.tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 80))
+        let newTitle = "New title 1.2 \(UUID().uuidString.prefix(6))"
+        field.typeText(newTitle)
+        app.navigationBars.buttons["Rename"].tap()
+        XCTAssertTrue(app.navigationBars[newTitle].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let row = app.buttons[newTitle + ".md"]
+        for _ in 0..<8 where !row.exists { app.collectionViews.firstMatch.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons[original].exists)
+    }
 
     private func title(of name: String) -> String {
         name.replacingOccurrences(of: ".md", with: "")

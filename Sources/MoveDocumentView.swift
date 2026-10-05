@@ -17,6 +17,7 @@ struct MoveDocumentView: View {
 
     @State private var destination: URL?
     @State private var errorMessage: String?
+    @State private var isMoving = false
 
     init(fileURL: URL, onCompleted: @escaping () -> Void = {}) {
         self.fileURL = fileURL
@@ -26,6 +27,7 @@ struct MoveDocumentView: View {
     var body: some View {
         NavigationStack {
             List {
+                if isMoving { ProgressView("Updating links…") }
                 Section("Folders") {
                     ForEach(store.vaultDirectories(), id: \.self) { directory in
                         folderRow(directory)
@@ -39,10 +41,11 @@ struct MoveDocumentView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isMoving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Move") { moveDocument() }
-                        .disabled(!canMove)
+                        .disabled(isMoving || !canMove)
                 }
             }
             .alert("Cannot Move Document", isPresented: Binding(
@@ -54,6 +57,7 @@ struct MoveDocumentView: View {
                 Text(errorMessage ?? "The document could not be moved.")
             }
         }
+        .interactiveDismissDisabled(isMoving)
         #if os(macOS)
         .frame(minWidth: 420, minHeight: 360)
         #endif
@@ -96,13 +100,19 @@ struct MoveDocumentView: View {
     }
 
     private func moveDocument() {
-        guard let destination, canMove else { return }
-        guard store.moveDocument(fileURL, to: destination) != nil else {
-            errorMessage = "The destination is unavailable or already contains an invalid path."
-            return
+        guard let destination, canMove, !isMoving else { return }
+        isMoving = true
+        Task {
+            let moved = await store.moveWithLinks(fileURL, to: destination)
+            isMoving = false
+            guard moved != nil else {
+                errorMessage = store.operationError ?? String(localized: "The destination is unavailable or already contains an invalid path.")
+                store.operationError = nil
+                return
+            }
+            onCompleted()
+            dismiss()
         }
-        onCompleted()
-        dismiss()
     }
 
     private func depth(of directory: URL) -> Int {

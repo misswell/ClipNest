@@ -29,16 +29,13 @@ enum VaultTrash {
     }
 
     static func loadManifest(in root: URL) -> [TrashEntry] {
-        guard let data = try? Data(contentsOf: manifestURL(in: root)) else { return [] }
+        guard let data = try? VaultFileAccess.readDataImmediately(at: manifestURL(in: root)) else { return [] }
         return (try? JSONDecoder().decode([TrashEntry].self, from: data)) ?? []
     }
 
-    static func saveManifest(_ entries: [TrashEntry], in root: URL) {
-        try? FileManager.default.createDirectory(at: directoryURL(in: root),
-                                                  withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(entries) {
-            try? data.write(to: manifestURL(in: root), options: .atomic)
-        }
+    static func saveManifest(_ entries: [TrashEntry], in root: URL) throws {
+        try FileManager.default.createDirectory(at: directoryURL(in: root), withIntermediateDirectories: true)
+        try VaultFileAccess.writeDataImmediately(JSONEncoder().encode(entries), to: manifestURL(in: root))
     }
 
     /// Moves an item from the vault into the trash. Returns nil when the item is not
@@ -59,7 +56,7 @@ enum VaultTrash {
             destination = directoryURL(in: root).appendingPathComponent(trashedName)
             bump += 1
         }
-        try FileManager.default.moveItem(at: url, to: destination)
+        try VaultFileAccess.moveItem(at: url, to: destination, followPendingWrites: false)
 
         let rootPath = root.standardizedFileURL.path
         let fullPath = url.standardizedFileURL.path
@@ -74,7 +71,13 @@ enum VaultTrash {
                                isDirectory: isDirectory,
                                deletedAt: Date())
         entries.insert(entry, at: 0)
-        saveManifest(entries, in: root)
+        do {
+            try saveManifest(entries, in: root)
+        } catch {
+            // Without a manifest entry this item cannot be restored from the UI.
+            try VaultFileAccess.moveItem(at: destination, to: url, followPendingWrites: false)
+            throw error
+        }
         return entry
     }
 
@@ -87,7 +90,9 @@ enum VaultTrash {
 
     /// Moves a trashed item back to its original location. If something now occupies
     /// that path, the restored copy gets a " 2", " 3" … suffix instead.
-    static func restore(_ entry: TrashEntry, in root: URL) throws {
+    @discardableResult
+    static func restore(_ entry: TrashEntry, in root: URL) throws -> URL {
+        try validate(entry, in: root)
         let source = directoryURL(in: root).appendingPathComponent(entry.id)
         guard FileManager.default.fileExists(atPath: source.path) else {
             throw CocoaError(.fileNoSuchFile)
@@ -107,28 +112,50 @@ enum VaultTrash {
         }
         try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
-        try FileManager.default.moveItem(at: source, to: destination)
+        try VaultFileAccess.moveItem(at: source, to: destination, followPendingWrites: false)
 
         var entries = loadManifest(in: root)
         entries.removeAll { $0.id == entry.id }
-        saveManifest(entries, in: root)
+        do {
+            try saveManifest(entries, in: root)
+        } catch {
+            try VaultFileAccess.moveItem(at: destination, to: source, followPendingWrites: false)
+            throw error
+        }
+        return destination
     }
 
     static func purge(_ entry: TrashEntry, in root: URL) throws {
+        try validate(entry, in: root)
         let source = directoryURL(in: root).appendingPathComponent(entry.id)
         if FileManager.default.fileExists(atPath: source.path) {
             try FileManager.default.removeItem(at: source)
         }
         var entries = loadManifest(in: root)
         entries.removeAll { $0.id == entry.id }
-        saveManifest(entries, in: root)
+        try saveManifest(entries, in: root)
     }
 
     static func purgeAll(in root: URL) throws {
         for entry in loadManifest(in: root) {
-            try? FileManager.default.removeItem(at: directoryURL(in: root).appendingPathComponent(entry.id))
+            try validate(entry, in: root)
+            let url = directoryURL(in: root).appendingPathComponent(entry.id)
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
         }
-        try? FileManager.default.removeItem(at: manifestURL(in: root))
+        if FileManager.default.fileExists(atPath: manifestURL(in: root).path) {
+            try FileManager.default.removeItem(at: manifestURL(in: root))
+        }
+    }
+
+    private static func validate(_ entry: TrashEntry, in root: URL) throws {
+        let destination = root.appendingPathComponent(entry.originalRelativePath).standardizedFileURL
+        guard !entry.id.isEmpty, entry.id != ".", entry.id != "..", !entry.id.contains("/"),
+              isInside(destination, root: root),
+              isInside(destination.resolvingSymlinksInPath(), root: root.resolvingSymlinksInPath()) else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
     }
 
     /// Drops trashed items older than the cutoff (30-day retention policy).
@@ -136,11 +163,15 @@ enum VaultTrash {
         let entries = loadManifest(in: root)
         let survivors = entries.filter { entry in
             if entry.deletedAt >= cutoff { return true }
-            try? FileManager.default.removeItem(at: directoryURL(in: root).appendingPathComponent(entry.id))
-            return false
+            do {
+                try validate(entry, in: root)
+                let url = directoryURL(in: root).appendingPathComponent(entry.id)
+                if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+                return false
+            } catch { return true }
         }
         if survivors.count != entries.count {
-            saveManifest(survivors, in: root)
+            try? saveManifest(survivors, in: root)
         }
     }
 }

@@ -31,6 +31,8 @@ struct VSCodeLayout: View {
     @State private var showDeleteConfirmation = false
     @State private var showNewFileAlert = false
     @State private var newFileName = "Untitled.md"
+    @State private var renameTarget: RenameItemTarget?
+    @State private var moveTarget: MoveDocumentTarget?
 
     private var editorMode: Binding<EditorMode> {
         Binding(
@@ -113,6 +115,38 @@ struct VSCodeLayout: View {
         .onChange(of: store.lastDocumentMove) { _, move in
             guard let move else { return }
             updateOpenTabs(for: move)
+            if let root = store.rootURL { DesktopWorkspaceRepository.relocate(move, root: root) }
+        }
+        .onChange(of: store.lastDeletedURL) { _, deleted in
+            guard let deleted else { return }
+            openTabs.removeAll {
+                $0.standardizedFileURL == deleted || $0.standardizedFileURL.path.hasPrefix(deleted.path + "/")
+            }
+        }
+        .onChange(of: store.rootURL) { _, _ in openTabs = [] }
+        .sheet(item: $renameTarget) { target in RenameItemView(fileURL: target.url) }
+        .sheet(item: $moveTarget) { target in MoveDocumentView(fileURL: target.url) }
+        .sheet(isPresented: $store.showKnowledge) { KnowledgeHubView().frame(minWidth: 720, minHeight: 600) }
+        .sheet(isPresented: $store.showWorkspaces) {
+            if let root = store.rootURL {
+                DesktopWorkspaceManager(root: root, current: { name in
+                    DesktopWorkspace(name: name, tabs: openTabs.map { MarkdownKnowledge.relativePath($0, to: root) },
+                        selected: selection.fileURL.map { MarkdownKnowledge.relativePath($0, to: root) },
+                        activity: activity.rawValue, sidebarVisible: sidebarVisible, sidebarWidth: sidebarWidth,
+                        terminalVisible: terminalVisible, terminalWidth: terminalWidth, mode: storedEditorMode, multipleTabs: multipleTabs)
+                }, onLoad: { layout in
+                    multipleTabs = layout.multipleTabs
+                    openTabs = layout.urls(in: root)
+                    activity = ActivityItem(rawValue: layout.activity) ?? .explorer
+                    sidebarVisible = layout.sidebarVisible
+                    sidebarWidth = min(560, max(170, layout.sidebarWidth))
+                    terminalVisible = layout.terminalVisible
+                    terminalWidth = min(1100, max(280, layout.terminalWidth))
+                    storedEditorMode = EditorMode(rawValue: layout.mode)?.rawValue ?? EditorMode.preview.rawValue
+                    selection.fileURL = layout.selected.map { root.appendingPathComponent($0).standardizedFileURL }
+                        .flatMap { openTabs.contains($0) ? $0 : nil } ?? openTabs.first
+                })
+            }
         }
         .onChange(of: multipleTabs) { _, multi in
             if !multi { openTabs = selection.fileURL.map { [$0] } ?? [] }
@@ -175,9 +209,7 @@ struct VSCodeLayout: View {
     private func updateOpenTabs(for move: VaultDocumentMove) {
         var updated: [URL] = []
         for tab in openTabs {
-            let candidate = tab.standardizedFileURL == move.source.standardizedFileURL
-                ? move.destination
-                : tab
+            let candidate = move.relocated(tab)
             if !updated.contains(candidate) { updated.append(candidate) }
         }
         openTabs = updated
@@ -209,12 +241,16 @@ struct VSCodeLayout: View {
             Group {
                 if let url = selection.fileURL {
                     let node = FileNode(url: url, name: url.lastPathComponent, isDirectory: false, children: nil)
-                    if node.isEditable {
+                    if node.ext == "canvas" {
+                        CanvasEditorView(url: url)
+                    } else if node.ext == "base" {
+                        BaseEditorView(url: url)
+                    } else if node.isEditable {
                         EditorPane(url: url, mode: editorMode)
                     } else if node.isImage {
                         ImageFileView(url: url)
                     } else {
-                        unsupportedFile(url)
+                        VaultAttachmentView(url: url)
                     }
                 } else {
                     HomeWelcomeView()
@@ -279,6 +315,9 @@ struct VSCodeLayout: View {
     /// phone's editor "…" menu. Deleting confirms first, like on iOS.
     private func documentActionsMenu(_ url: URL) -> some View {
         Menu {
+            Button("Rename Note") { renameTarget = RenameItemTarget(url: url) }
+            Button("Move to Folder…") { moveTarget = MoveDocumentTarget(url: url) }
+            Divider()
             Button("Reveal in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }

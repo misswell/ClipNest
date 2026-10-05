@@ -262,12 +262,17 @@ struct LocalModelDownloader: Sendable {
                     try? FileManager.default.removeItem(at: destination)
                     written = 0
                 }
-                if Int64(data.count) < file.size { continue }
+                guard Int64(data.count) >= file.size else {
+                    throw LocalModelDownloadError.shortResponse(expected: file.size, received: Int64(data.count))
+                }
             default:
                 throw LocalModelDownloadError.badStatus(response.statusCode)
             }
 
             let remaining = file.size - written
+            guard !data.isEmpty else {
+                throw LocalModelDownloadError.shortResponse(expected: upper - written + 1, received: 0)
+            }
             guard Int64(data.count) <= remaining else {
                 throw LocalModelDownloadError.ioFailure(
                     String(localized: "The server sent more data than requested."))
@@ -310,6 +315,8 @@ struct LocalModelDownloader: Sendable {
                 throw LocalModelDownloadError.shortResponse(expected: file.size, received: size)
             }
             guard try Self.sha256(of: url) == file.sha256.lowercased() else {
+                // Retrying a complete but corrupt staging file must download fresh bytes.
+                try FileManager.default.removeItem(at: url)
                 throw LocalModelDownloadError.checksumMismatch(file: file.name)
             }
         }

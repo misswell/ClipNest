@@ -8,8 +8,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.4"
-    CURRENT_PROJECT_VERSION: "11"
+    MARKETING_VERSION: "1.5"
+    CURRENT_PROJECT_VERSION: "12"
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "GU9WTSTX9M"
     CODE_SIGN_STYLE: Automatic
@@ -18,8 +18,12 @@ settings:
     INFOPLIST_KEY_CFBundleDisplayName: "ClipNest"
     INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Tertiary Infotech Academy Pte Ltd"
     INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.productivity"
+    INFOPLIST_KEY_NSMicrophoneUsageDescription: "Record audio attachments for your notes."
 
 packages:
+  Yams:
+    url: https://github.com/jpsim/Yams
+    exactVersion: "6.2.2"
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
     from: "1.2.0"
@@ -47,6 +51,7 @@ targets:
       - path: Resources/SampleVault
         type: folder
     dependencies:
+      - package: Yams
       - package: SwiftTerm
       # Only the four products the local model runtime needs. `MLXLLM` carries the
       # Qwen3 architecture, `MLXLMCommon` the container/`ChatSession` API,
@@ -85,6 +90,7 @@ targets:
       path: Sources/MarkdownVault.entitlements
       properties:
         com.apple.security.app-sandbox: false
+        com.apple.security.device.audio-input: true
 
   ClipNestTests:
     type: bundle.unit-test

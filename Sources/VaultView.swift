@@ -12,8 +12,7 @@ struct VaultView: View {
     @State private var creationDirectory: URL?
 
     // Rename
-    @State private var renameTarget: URL?
-    @State private var renameText = ""
+    @State private var renameTarget: RenameItemTarget?
     @State private var moveTarget: MoveDocumentTarget?
 
     var body: some View {
@@ -21,8 +20,7 @@ struct VaultView: View {
             onNewFile: { directory in startNewFile(in: directory) },
             onNewFolder: { directory in startNewFolder(in: directory) },
             onRename: { url, name in
-                renameTarget = url
-                renameText = name
+                renameTarget = RenameItemTarget(url: url)
             },
             onMove: { url in moveTarget = MoveDocumentTarget(url: url) },
             onDelete: { store.delete($0) },
@@ -53,10 +51,9 @@ struct VaultView: View {
             }
             Button("Cancel", role: .cancel) { creationDirectory = nil }
         }
-        .alert("Rename", isPresented: Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })) {
-            TextField("Name", text: $renameText)
-            Button("Rename") { if let t = renameTarget { store.rename(t, to: renameText) }; renameTarget = nil }
-            Button("Cancel", role: .cancel) { renameTarget = nil }
+        .sheet(item: $renameTarget) { target in
+            RenameItemView(fileURL: target.url)
+                .environmentObject(store)
         }
         .sheet(item: $moveTarget) { target in
             MoveDocumentView(fileURL: target.url) { moveTarget = nil }
@@ -184,14 +181,16 @@ private struct VaultNavigationHost: View {
             // NavigationSplitView is animating into the detail column.
             let node = FileNode(url: url, name: url.lastPathComponent,
                                 isDirectory: false, children: nil)
-            if node.isEditable {
+            if node.ext == "canvas" {
+                CanvasEditorView(url: url)
+            } else if node.ext == "base" {
+                BaseEditorView(url: url)
+            } else if node.isEditable {
                 MarkdownEditorView(url: url, intent: requestedIntent)
             } else if node.isImage {
                 ImageFileView(url: url)
             } else {
-                ContentUnavailableView("Unsupported File",
-                                       systemImage: "doc",
-                                       description: Text(url.lastPathComponent))
+                VaultAttachmentView(url: url)
             }
         } else {
             VaultHomeView(onSelect: selectFile)

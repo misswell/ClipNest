@@ -96,9 +96,11 @@ actor LocalSearchIndexer {
         }
 
         // Files that disappeared from the vault lose their index rows.
-        for path in known.keys where !seenPaths.contains(path) {
-            try? database.deleteFile(atPath: path)
-            statistics.removedFiles += 1
+        if !Task.isCancelled {
+            for path in known.keys where !seenPaths.contains(path) {
+                try? database.deleteFile(atPath: path)
+                statistics.removedFiles += 1
+            }
         }
 
         statistics.duration = Date().timeIntervalSince(started)

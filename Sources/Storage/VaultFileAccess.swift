@@ -71,10 +71,157 @@ actor VaultFileAccess {
 
     /// Coordinated I/O is blocking by design; keep it off the cooperative pool so a slow
     /// iCloud-backed directory cannot starve unrelated async work.
-    private static let coordinationQueue = DispatchQueue(
-        label: "com.clipnest.vault.coordination",
-        qos: .utility,
-        attributes: .concurrent)
+    private static let queueMarker = DispatchSpecificKey<Bool>()
+    private static let coordinationQueue: DispatchQueue = {
+        let queue = DispatchQueue(label: "com.clipnest.vault.coordination", qos: .utility)
+        queue.setSpecific(key: queueMarker, value: true)
+        return queue
+    }()
+
+    // Accessed only on coordinationQueue. Pending editor saves follow a moved file rather
+    // than recreating its old path. Creation of a new item releases that path for reuse.
+    private static var movedPaths: [String: String] = [:]
+    private static var editorRevisions: [String: UInt64] = [:]
+
+    nonisolated static func performMutation<T>(_ operation: () throws -> T) rethrows -> T {
+        if DispatchQueue.getSpecific(key: queueMarker) == true { return try operation() }
+        return try coordinationQueue.sync(execute: operation)
+    }
+
+    /// Small local metadata files (trash manifest) need synchronous access from CRUD callers.
+    nonisolated static func readDataImmediately(at url: URL) throws -> Data {
+        try performMutation {
+            var coordinationError: NSError?
+            var outcome: Result<Data, Error>?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { readable in
+                outcome = Result { try Data(contentsOf: readable) }
+            }
+            if let coordinationError { throw coordinationError }
+            guard let outcome else { throw CocoaError(.fileReadUnknown) }
+            return try outcome.get()
+        }
+    }
+
+    nonisolated static func writeDataImmediately(_ data: Data, to url: URL) throws {
+        try performMutation {
+            var coordinationError: NSError?
+            var outcome: Result<Void, Error>?
+            NSFileCoordinator().coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { writable in
+                outcome = Result { try data.write(to: writable, options: .atomic) }
+            }
+            if let coordinationError { throw coordinationError }
+            guard let outcome else { throw CocoaError(.fileWriteUnknown) }
+            try outcome.get()
+        }
+    }
+
+    nonisolated static func moveItem(at source: URL, to destination: URL, followPendingWrites: Bool = true) throws {
+        try performMutation {
+            let coordinator = NSFileCoordinator()
+            var coordinationError: NSError?
+            var outcome: Result<Void, Error>?
+            coordinator.coordinate(writingItemAt: source, options: .forMoving,
+                                   writingItemAt: destination, options: [],
+                                   error: &coordinationError) { from, to in
+                outcome = Result { try FileManager.default.moveItem(at: from, to: to) }
+                if case .success = outcome { coordinator.item(at: from, didMoveTo: to) }
+            }
+            if let coordinationError { throw coordinationError }
+            guard let outcome else { throw CocoaError(.fileWriteUnknown) }
+            try outcome.get()
+            guard followPendingWrites else { return }
+            let old = source.standardizedFileURL.path
+            let new = destination.standardizedFileURL.path
+            for (key, value) in movedPaths {
+                if value == old || value.hasPrefix(old + "/") {
+                    movedPaths[key] = new + value.dropFirst(old.count)
+                }
+            }
+            movedPaths.removeValue(forKey: new)
+            movedPaths[old] = new
+            for (key, value) in editorRevisions where key == old || key.hasPrefix(old + "/") {
+                let target = new + key.dropFirst(old.count)
+                editorRevisions[target] = max(editorRevisions[target] ?? 0, value)
+                editorRevisions.removeValue(forKey: key)
+            }
+        }
+    }
+
+    nonisolated static func createText(_ text: String, at url: URL) throws {
+        try performMutation {
+            var coordinationError: NSError?
+            var outcome: Result<Void, Error>?
+            NSFileCoordinator().coordinate(writingItemAt: url, options: [],
+                                           error: &coordinationError) { target in
+                outcome = Result {
+                    try Data(text.utf8).write(to: target, options: .withoutOverwriting)
+                }
+            }
+            if let coordinationError { throw coordinationError }
+            guard let outcome else { throw CocoaError(.fileWriteUnknown) }
+            try outcome.get()
+            movedPaths.removeValue(forKey: url.standardizedFileURL.path)
+            editorRevisions.removeValue(forKey: url.standardizedFileURL.path)
+        }
+    }
+
+    /// Queue the save before returning to the caller, so a following move/delete waits
+    /// for it even if the MainActor callback has not run yet.
+    nonisolated static func enqueueExistingText(_ text: String, to url: URL, revision: UInt64,
+                                                historyRoot: URL? = nil,
+                                                completion: @escaping @Sendable (Result<URL?, Error>) -> Void) {
+        coordinationQueue.async {
+            do {
+                var targetPath = url.standardizedFileURL.path
+                var visited = Set<String>()
+                while visited.insert(targetPath).inserted,
+                      let source = Self.movedPaths.keys
+                        .filter({ targetPath == $0 || targetPath.hasPrefix($0 + "/") })
+                        .max(by: { $0.count < $1.count }),
+                      let destination = Self.movedPaths[source] {
+                    targetPath = destination + targetPath.dropFirst(source.count)
+                }
+                let target = URL(fileURLWithPath: targetPath)
+                guard FileManager.default.fileExists(atPath: targetPath),
+                      revision >= (Self.editorRevisions[targetPath] ?? 0) else {
+                    completion(.success(nil))
+                    return
+                }
+                var coordinationError: NSError?
+                var outcome: Result<Void, Error>?
+                NSFileCoordinator().coordinate(writingItemAt: target, options: .forReplacing,
+                                               error: &coordinationError) { writable in
+                    outcome = Result {
+                        // Recheck inside the accessor: another app may have deleted it.
+                        guard FileManager.default.fileExists(atPath: writable.path) else {
+                            throw CocoaError(.fileNoSuchFile)
+                        }
+                        if let historyRoot,
+                           let previous = String(data: try Data(contentsOf: writable), encoding: .utf8), previous != text {
+                            try VaultHistory.record(previous, for: writable, root: historyRoot)
+                        }
+                        try Data(text.utf8).write(to: writable, options: .atomic)
+                    }
+                }
+                if let coordinationError { throw coordinationError }
+                guard let outcome else { throw CocoaError(.fileWriteUnknown) }
+                try outcome.get()
+                Self.editorRevisions[targetPath] = revision
+                completion(.success(target))
+            } catch {
+                completion(.failure(VaultAccessError.writeFailed(error.localizedDescription)))
+            }
+        }
+    }
+
+    /// Autosaves only update an existing document. A delete must never resurrect it.
+    func writeExistingText(_ text: String, to url: URL, revision: UInt64) async throws -> URL? {
+        try await withCheckedThrowingContinuation { continuation in
+            Self.enqueueExistingText(text, to: url, revision: revision) { result in
+                continuation.resume(with: result)
+            }
+        }
+    }
 
     private var latestRevision: [String: UInt64] = [:]
 
@@ -117,6 +264,44 @@ actor VaultFileAccess {
     }
 
     // MARK: - iCloud
+
+    /// AVPlayer reads a private local copy, while the original iCloud/scoped file is read
+    /// only inside a coordinated accessor. The caller owns and removes this temporary file.
+    func mediaPreviewCopy(at url: URL) async throws -> URL {
+        try await materializeIfNeeded(url, phase: nil)
+        return try await withCheckedThrowingContinuation { continuation in
+            Self.coordinationQueue.async {
+                let destination = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("ClipNest-Media-" + UUID().uuidString).appendingPathExtension(url.pathExtension)
+                var coordinationError: NSError?
+                var outcome: Result<URL, Error>?
+                NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { readable in
+                    outcome = Result { try FileManager.default.copyItem(at: readable, to: destination); return destination }
+                }
+                if let coordinationError { continuation.resume(throwing: coordinationError) }
+                else if let outcome { continuation.resume(with: outcome) }
+                else { continuation.resume(throwing: CocoaError(.fileReadUnknown)) }
+            }
+        }
+    }
+
+    nonisolated static func importMedia(from source: URL, root: URL) throws -> URL {
+        try performMutation {
+            let directory = root.appendingPathComponent("Attachments", isDirectory: true)
+            guard VaultNoteCatalog.isInside(directory, root: root) else { throw CocoaError(.fileWriteNoPermission) }
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let destination = directory.appendingPathComponent("Recording-" + UUID().uuidString).appendingPathExtension("m4a")
+            var coordinationError: NSError?
+            var outcome: Result<URL, Error>?
+            NSFileCoordinator().coordinate(readingItemAt: source, options: [], writingItemAt: destination, options: [],
+                                           error: &coordinationError) { readable, writable in
+                outcome = Result { try FileManager.default.copyItem(at: readable, to: writable); return destination }
+            }
+            if let coordinationError { throw coordinationError }
+            guard let outcome else { throw CocoaError(.fileWriteUnknown) }
+            return try outcome.get()
+        }
+    }
 
     /// True when the item has a readable local copy (or is not in iCloud at all).
     func hasLocalContents(at url: URL) -> Bool {

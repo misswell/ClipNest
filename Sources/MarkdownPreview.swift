@@ -12,6 +12,9 @@ struct MarkdownPreview: View {
     /// Called with the document-wide checkbox index when a checklist box is tapped
     /// (Obsidian-style live toggling). When nil, checkboxes are read-only.
     var onToggleCheckbox: ((Int) -> Void)? = nil
+    var onOpenNote: ((String) -> Void)? = nil
+    var scrollHeading: String? = nil
+    var embedDepth = 0
 
     @State private var renderItems: [MarkdownRenderItem] = []
     @State private var isParsing = true
@@ -37,10 +40,12 @@ struct MarkdownPreview: View {
                 ProgressView("Rendering preview…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         ForEach(renderItems) { item in
                             view(for: item.block, checkboxStart: item.checkboxStart)
+                                .id(item.headingKey ?? "block-\(item.id)")
                         }
                     }
                     .padding(.horizontal, AppMetrics.screenHorizontal)
@@ -49,6 +54,23 @@ struct MarkdownPreview: View {
                     .frame(maxWidth: AppMetrics.contentMaxWidth, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
+                }
+                .onChange(of: scrollHeading) { _, heading in
+                    if let heading { withAnimation { proxy.scrollTo(Self.headingKey(heading), anchor: .top) } }
+                }
+                .onChange(of: isParsing) { _, parsing in
+                    if !parsing, let scrollHeading { proxy.scrollTo(Self.headingKey(scrollHeading), anchor: .top) }
+                }
+                .environment(\.openURL, OpenURLAction { url in
+                    if let target = MarkdownKnowledge.navigationTarget(url) {
+                        let parts = MarkdownKnowledge.splitTarget(target)
+                        if parts.path.isEmpty {
+                            withAnimation { proxy.scrollTo(Self.headingKey(parts.fragment), anchor: .top) }
+                        } else { onOpenNote?(target) }
+                        return .handled
+                    }
+                    return .systemAction
+                })
                 }
             }
         }
@@ -138,7 +160,10 @@ struct MarkdownPreview: View {
                 }
             }
 
-        case let .code(_, code):
+        case let .code(language, code):
+            if language.lowercased() == "base", let documentURL {
+                BaseEditorView(url: documentURL, inlineSource: code).frame(minHeight: 200, maxHeight: 450)
+            } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
                     .font(.system(.callout, design: .monospaced))
@@ -146,24 +171,35 @@ struct MarkdownPreview: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
 
         case let .quote(text):
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 2).fill(Theme.accent).frame(width: 4)
-                Text(text).foregroundStyle(Theme.mutedInk).italic()
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 4)
+            NoteCalloutView(text: text)
 
         case let .table(headers, rows):
             TableBlock(headers: headers, rows: rows)
 
         case let .image(alt, src):
-            imageView(alt: alt, src: src)
+            if let documentURL, (MarkdownKnowledge.splitTarget(src).path as NSString).pathExtension.lowercased() == "base" {
+                BaseEmbedView(source: src, document: documentURL)
+            } else if let documentURL, ["m4a", "mp3", "wav", "aac", "ogg", "flac", "mp4", "mov", "webm"].contains((src as NSString).pathExtension.lowercased()) {
+                NoteMediaPlayer(source: src, document: documentURL)
+            } else if let documentURL, let vaultRootURL,
+               ["", "md", "markdown", "mdown"].contains((MarkdownKnowledge.splitTarget(src).path as NSString).pathExtension.lowercased()) {
+                NoteEmbedView(target: src, document: documentURL, root: vaultRootURL,
+                              depth: embedDepth, onOpenNote: onOpenNote)
+            } else { imageView(alt: alt, src: src) }
 
         case .rule:
             Divider().padding(.vertical, 4)
         }
+    }
+
+    static func headingKey(_ title: String) -> String {
+        if title.hasPrefix("^") { return "block-" + title.dropFirst() }
+        return "heading-" + (title.components(separatedBy: "#").last ?? title)
+            .replacingOccurrences(of: "*", with: "").replacingOccurrences(of: "`", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     @ViewBuilder
@@ -247,6 +283,16 @@ private struct MarkdownRenderItem: Identifiable, Sendable {
     let id: Int
     let block: MarkdownRenderBlock
     let checkboxStart: Int
+    var footnoteID: String? = nil
+    var headingKey: String? {
+        if let footnoteID { return "block-fn-" + footnoteID }
+        if case let .heading(_, text) = block { return MarkdownPreview.headingKey(String(text.characters)) }
+        if case let .paragraph(text) = block,
+           let id = MarkdownKnowledge.matches("(?:^|\\s)\\^([A-Za-z0-9-]+)$", in: String(text.characters)).last {
+            return "block-" + (String(text.characters) as NSString).substring(with: id.range(at: 1))
+        }
+        return nil
+    }
 }
 
 private enum MarkdownRenderBlock: Sendable {
@@ -276,11 +322,15 @@ private enum MarkdownPreviewRenderer {
         var checkboxStart = 0
         for (index, block) in blocks.enumerated() {
             let rendered: MarkdownRenderBlock
+            var footnoteID: String?
             switch block {
             case let .heading(level, text):
                 rendered = .heading(level: level, text: inline(text))
             case let .paragraph(text):
                 rendered = .paragraph(inline(text))
+                footnoteID = MarkdownKnowledge.matches("^ {0,3}\\[\\^([^\\]]+)\\]:", in: text).first.map {
+                    (text as NSString).substring(with: $0.range(at: 1))
+                }
             case let .bulleted(items):
                 rendered = .bulleted(items.map(inline))
             case let .numbered(items):
@@ -303,7 +353,7 @@ private enum MarkdownPreviewRenderer {
 
             result.append(MarkdownRenderItem(id: index,
                                              block: rendered,
-                                             checkboxStart: checkboxStart))
+                                             checkboxStart: checkboxStart, footnoteID: footnoteID))
             if case let .checklist(items) = block {
                 checkboxStart += items.count
             }
@@ -315,15 +365,10 @@ private enum MarkdownPreviewRenderer {
     /// renderer, so the main actor only receives ready-to-display attributed strings.
     private static func inline(_ text: String) -> AttributedString {
         let lines = text.components(separatedBy: "\n")
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .inlineOnlyPreservingWhitespace)
         var result = AttributedString()
         for (index, raw) in lines.enumerated() {
             // Strip Obsidian wiki-link brackets for readability: [[Note]] -> Note
-            let line = raw.replacingOccurrences(of: "[[", with: "")
-                .replacingOccurrences(of: "]]", with: "")
-            let attributed = (try? AttributedString(markdown: line, options: options))
-                ?? AttributedString(line)
+            let attributed = MarkdownKnowledge.renderInline(raw)
             result.append(attributed)
             if index < lines.count - 1 {
                 result.append(AttributedString("\n"))
@@ -477,7 +522,7 @@ private struct TableBlock: View {
         HStack(spacing: 0) {
             ForEach(0..<columnCount, id: \.self) { c in
                 let value = c < cells.count ? cells[c] : ""
-                Text(value)
+                Text(MarkdownKnowledge.renderInline(value))
                     .font(isHeader ? .subheadline.bold() : .subheadline)
                     .foregroundStyle(isHeader ? Theme.ink : Theme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -58,6 +58,7 @@ struct MarkdownEditorView: View {
     let url: URL
     /// The mode this document starts in. Reset for every newly opened note — never persisted.
     var intent: NoteOpenIntent = .view
+    var initialHeading: String? = nil
 
     @State private var text: String = ""
     /// Edit / Split / Preview for the *currently open* document only.
@@ -73,12 +74,22 @@ struct MarkdownEditorView: View {
     @State private var reloadAttempt = 0
     @State private var loadRequestGate = DocumentLoadRequestGate()
     @State private var showDeleteConfirmation = false
+    @State private var renameTarget: RenameItemTarget?
+    @State private var moveTarget: MoveDocumentTarget?
+    @State private var relocatedURL: URL?
+    @State private var showInspector = false
+    @State private var showPresentation = false
+    @State private var linkedURL: URL?
+    @State private var linkedHeading: String?
+    @State private var scrollHeading: String?
+    @State private var missingLink: String?
+    @State private var showMissingLink = false
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.colorScheme) private var colorScheme
 
     private var isWide: Bool { hSize != .compact }
 
-    private var normalizedURL: URL { url.standardizedFileURL }
+    private var normalizedURL: URL { (relocatedURL ?? url).standardizedFileURL }
 
     private var isDocumentReady: Bool {
         hasLoadedText && loadedURL == normalizedURL
@@ -116,7 +127,7 @@ struct MarkdownEditorView: View {
                 loadingView
             }
         }
-        .navigationTitle(url.deletingPathExtension().lastPathComponent)
+        .navigationTitle(normalizedURL.deletingPathExtension().lastPathComponent)
         .modifier(NavigationSubtitleModifier(text: folderSubtitle))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -134,8 +145,54 @@ struct MarkdownEditorView: View {
         } message: {
             Text("This note will be removed from the vault.")
         }
-        .task(id: LoadKey(url: url, attempt: reloadAttempt)) {
+        .sheet(item: $renameTarget) { target in
+            RenameItemView(fileURL: target.url)
+        }
+        .sheet(item: $moveTarget) { target in
+            MoveDocumentView(fileURL: target.url)
+        }
+        .sheet(isPresented: $showInspector) {
+            NoteInspectorView(url: normalizedURL, text: $text, onOpen: openNote,
+                              onHeading: { mode = .preview; scrollHeading = $0 })
+        }
+        .navigationDestination(item: $linkedURL) { VaultDocumentDestination(url: $0, initialHeading: linkedHeading) }
+        .sheet(isPresented: $showPresentation) { NotePresentationView(text: text, url: normalizedURL) }
+        .alert("Create Linked Note?", isPresented: $showMissingLink) {
+            Button("Create") {
+                if let missingLink, let target = store.openOrCreateNote(path: MarkdownKnowledge.splitTarget(missingLink).path) { openNote(target) }
+            }
+            Button("Cancel", role: .cancel) { missingLink = nil }
+        } message: { Text(missingLink ?? "") }
+        .onChange(of: store.lastLinkMutation) { _, mutation in
+            guard let mutation, let current = loadedURL else { return }
+            saveTask?.cancel()
+            if mutation.isMerge && current == mutation.source {
+                hasLoadedText = false; loadedURL = nil; loadState = .idle
+                return
+            }
+            text = mutation.rewrite(text, at: current)
+            loadedTextSnapshot = mutation.rewrite(loadedTextSnapshot, at: current)
+            let destination = VaultDocumentMove(source: mutation.source, destination: mutation.destination).relocated(current)
+            if destination != current { relocatedURL = destination; loadedURL = destination; intentURL = destination }
+            if text != loadedTextSnapshot { store.save(text, to: destination) }
+        }
+        .onChange(of: store.lastDocumentMove) { _, move in
+            guard let move else { return }
+            let previous = loadedURL ?? normalizedURL
+            let destination = move.relocated(previous)
+            guard destination != previous else { return }
+            // Keep the loaded buffer: a reload could race a pending autosave.
+            saveTask?.cancel()
+            relocatedURL = destination
+            loadedURL = destination
+            intentURL = destination
+            if text != loadedTextSnapshot { store.save(text, to: destination) }
+        }
+        .onChange(of: url) { _, _ in relocatedURL = nil }
+        .task(id: LoadKey(url: normalizedURL, attempt: reloadAttempt)) {
+            if isDocumentReady { return }
             await loadDocument()
+            if let initialHeading { scrollHeading = initialHeading }
         }
         .onDisappear { flushSave() }
     }
@@ -147,7 +204,7 @@ struct MarkdownEditorView: View {
         // this request a generation before the first suspension so stale results can never
         // overwrite the current editor state.
         // A cancelled `.task` still runs its body, so it must never be allowed to claim the load.
-        guard let loadRequest = loadRequestGate.begin(for: url, isCancelled: Task.isCancelled) else {
+        guard let loadRequest = loadRequestGate.begin(for: normalizedURL, isCancelled: Task.isCancelled) else {
             return
         }
         // The host view is reused when the user switches notes, so `url` is already the
@@ -300,7 +357,7 @@ struct MarkdownEditorView: View {
     private var editor: some View {
         InsertableTextEditor(text: $text, documentID: normalizedURL, colorScheme: colorScheme)
             .onChange(of: text) { _, newValue in
-                guard hasLoadedText, newValue != loadedTextSnapshot else { return }
+                guard hasLoadedText else { return }
                 scheduleSave(newValue)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -312,7 +369,9 @@ struct MarkdownEditorView: View {
             markdown: text,
             resolveImage: { src in store.resolveImageURL(src, relativeTo: normalizedURL) },
             documentURL: normalizedURL,
-            vaultRootURL: store.rootURL)
+            vaultRootURL: store.rootURL,
+            onToggleCheckbox: toggleCheckbox,
+            onOpenNote: followLink, scrollHeading: scrollHeading)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -375,19 +434,30 @@ struct MarkdownEditorView: View {
                 }
             }
 
-            if store.selection.documentSource == .quickPaste {
-                AppToolbarIconButton(
-                    systemImage: "trash",
-                    role: .destructive,
-                    label: "Delete Note"
-                ) {
-                    showDeleteConfirmation = true
-                }
-            } else {
+            Group {
                 // A toolbar Menu pops down anchored to this button, so the destructive entry
                 // stays visually connected to the ellipsis (a confirmationDialog would slide
                 // up from the bottom edge, disconnected from the control that opened it).
                 Menu {
+                    Button("Start Presentation") { showPresentation = true }
+                    Button("Command Palette") { store.showCommandPalette = true }
+                    Menu("Insert") {
+                        Button("Internal Link") { insert(snippet: "[[Note]]") }
+                        Button("Todo / Checklist") { insert(snippet: "- [ ] ") }
+                        Button("Table") { insert(snippet: "| Column A | Column B |\n| --- | --- |\n| | |\n") }
+                        Button("Callout") { insert(snippet: "> [!note]\n> ") }
+                        Button("Code Block") { insert(snippet: "```\n\n```\n") }
+                    }
+                    Button { flushSave(); showInspector = true } label: {
+                        Label("Note Details", systemImage: "list.bullet.rectangle")
+                    }
+                    Button { renameTarget = RenameItemTarget(url: normalizedURL) } label: {
+                        Label("Rename Note", systemImage: "pencil")
+                    }
+                    Button { moveTarget = MoveDocumentTarget(url: normalizedURL) } label: {
+                        Label("Move to Folder…", systemImage: "folder")
+                    }
+                    Divider()
                     Button("Delete Note", role: .destructive) {
                         showDeleteConfirmation = true
                     }
@@ -414,32 +484,57 @@ struct MarkdownEditorView: View {
 
     // MARK: - Actions
 
+    private func openNote(_ target: URL) {
+        flushSave()
+        #if os(macOS)
+        store.selectedFileURL = target
+        #else
+        linkedURL = target
+        #endif
+    }
+
+    private func followLink(_ target: String) {
+        Task {
+            if let resolved = await store.resolveNote(target, from: normalizedURL) {
+                if resolved == normalizedURL { mode = .preview; scrollHeading = MarkdownKnowledge.splitTarget(target).fragment }
+                else { linkedHeading = MarkdownKnowledge.splitTarget(target).fragment; openNote(resolved) }
+            } else { missingLink = target; showMissingLink = true }
+        }
+    }
+
+    private func toggleCheckbox(_ index: Int) {
+        guard isDocumentReady, let updated = MarkdownParser.togglingCheckbox(at: index, in: text) else { return }
+        saveTask?.cancel()
+        text = updated
+        store.save(updated, to: normalizedURL)
+    }
+
     private func deleteCurrentNote() {
         // A debounced edit must not recreate a note after the user has just deleted it, and the
         // disappearance callback must not flush the editor back to the removed URL.
         saveTask?.cancel()
+        guard store.delete(normalizedURL) else { return }
         hasLoadedText = false
         loadedURL = nil
         loadState = .idle
-        store.delete(url)
     }
 
     private func scheduleSave(_ value: String) {
-        guard hasLoadedText, value != loadedTextSnapshot else { return }
         saveTask?.cancel()
+        guard hasLoadedText, let target = loadedURL else { return }
         saveTask = Task {
             try? await Task.sleep(nanoseconds: 600_000_000)
             guard !Task.isCancelled else { return }
-            store.save(value, to: url)
+            store.save(value, to: target)
         }
     }
 
     private func flushSave() {
         // Never rewrite the document unless the text actually diverged from what was
         // loaded: a failed read must not be able to wipe the file with empty content.
-        guard hasLoadedText, text != loadedTextSnapshot else { return }
         saveTask?.cancel()
-        store.save(text, to: url)
+        guard hasLoadedText, let target = loadedURL, text != loadedTextSnapshot else { return }
+        store.save(text, to: target)
     }
 
     // MARK: - Insert helpers (append-based; simple and reliable cross-platform)

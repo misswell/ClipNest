@@ -11,23 +11,23 @@ enum WikiService {
         FileManager.default.fileExists(atPath: root.appendingPathComponent("wiki/index.md").path)
     }
 
-    static func initialize(_ root: URL) {
+    static func initialize(_ root: URL) throws {
         let fm = FileManager.default
         let dirs = ["wiki", "wiki/entities", "wiki/concepts", "raw"]
         for d in dirs {
-            try? fm.createDirectory(at: root.appendingPathComponent(d), withIntermediateDirectories: true)
+            try fm.createDirectory(at: root.appendingPathComponent(d), withIntermediateDirectories: true)
         }
-        write(root.appendingPathComponent("CLAUDE.md"), schema, overwrite: false)
-        write(root.appendingPathComponent("wiki/index.md"), indexTemplate, overwrite: false)
-        write(root.appendingPathComponent("wiki/log.md"), logTemplate, overwrite: false)
-        write(root.appendingPathComponent("wiki/entities/.gitkeep"), "", overwrite: false)
-        write(root.appendingPathComponent("wiki/concepts/.gitkeep"), "", overwrite: false)
-        write(root.appendingPathComponent("raw/.gitkeep"), "", overwrite: false)
+        try write(root.appendingPathComponent("CLAUDE.md"), schema)
+        try write(root.appendingPathComponent("wiki/index.md"), indexTemplate)
+        try write(root.appendingPathComponent("wiki/log.md"), logTemplate)
+        try write(root.appendingPathComponent("wiki/entities/.gitkeep"), "")
+        try write(root.appendingPathComponent("wiki/concepts/.gitkeep"), "")
+        try write(root.appendingPathComponent("raw/.gitkeep"), "")
     }
 
-    private static func write(_ url: URL, _ contents: String, overwrite: Bool) {
-        if !overwrite && FileManager.default.fileExists(atPath: url.path) { return }
-        try? contents.data(using: .utf8)?.write(to: url, options: .atomic)
+    private static func write(_ url: URL, _ contents: String) throws {
+        if FileManager.default.fileExists(atPath: url.path) { return }
+        try VaultFileAccess.createText(contents, at: url)
     }
 
     static let schema = """
@@ -194,7 +194,14 @@ struct WikiPanel: View {
                     .font(.system(size: 12)).foregroundStyle(.green)
             } else {
                 Button("Initialize Wiki in Vault") {
-                    if let r = store.rootURL { WikiService.initialize(r); store.refresh(); initialized = true }
+                    guard let root = store.rootURL else { return }
+                    do {
+                        try WikiService.initialize(root)
+                        store.refresh()
+                        initialized = WikiService.isInitialized(root)
+                    } catch {
+                        store.operationError = error.localizedDescription
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(store.rootURL == nil)
@@ -238,12 +245,12 @@ struct WikiPanel: View {
     private func ingestCurrent() {
         guard let file = selection.fileURL else { return }
         let rel = relativePath(file)
-        runInTerminal("claude \"Ingest the note '\(rel)' into the wiki per CLAUDE.md: extract entities and concepts, create or update the relevant wiki pages with [[links]], update wiki/index.md, and append a line to wiki/log.md.\"")
+        let prompt = "Ingest the note '\(rel)' into the wiki per CLAUDE.md: extract entities and concepts, create or update the relevant wiki pages with [[links]], update wiki/index.md, and append a line to wiki/log.md."
+        runInTerminal("claude " + ShellArgument.quote(prompt))
     }
 
     private func ask() {
-        let q = question.replacingOccurrences(of: "\"", with: "\\\"")
-        runInTerminal("claude \"Answer from the wiki per CLAUDE.md, citing [[pages]]: \(q)\"")
+        runInTerminal("claude " + ShellArgument.quote("Answer from the wiki per CLAUDE.md, citing [[pages]]: " + question))
         question = ""
     }
 
@@ -291,8 +298,7 @@ struct GitHubPanel: View {
                 HStack {
                     TextField("Commit message", text: $commitMessage).textFieldStyle(.roundedBorder)
                     Button("Commit") {
-                        let m = commitMessage.replacingOccurrences(of: "\"", with: "\\\"")
-                        runInTerminal("git add -A && git commit -m \"\(m)\"")
+                        runInTerminal("git add -A && git commit -m " + ShellArgument.quote(commitMessage))
                     }
                 }
                 Button("Push to GitHub") { runInTerminal("git push") }

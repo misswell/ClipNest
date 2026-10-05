@@ -186,6 +186,7 @@ extension VaultStore {
         refresh()
         selectedFileURL = url
         selection.documentSource = .quickPaste
+        notifyFileChanges([url])
         return url
     }
 
@@ -212,6 +213,7 @@ extension VaultStore {
         refresh()
         selectedFileURL = url
         selection.documentSource = .quickPaste
+        notifyFileChanges([url])
         return url
     }
 

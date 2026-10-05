@@ -12,6 +12,13 @@ enum VaultMoveDirection {
 struct VaultDocumentMove: Equatable {
     let source: URL
     let destination: URL
+
+    func relocated(_ url: URL) -> URL {
+        let path = url.standardizedFileURL.path
+        let old = source.standardizedFileURL.path
+        guard path == old || path.hasPrefix(old + "/") else { return url }
+        return URL(fileURLWithPath: destination.standardizedFileURL.path + path.dropFirst(old.count))
+    }
 }
 
 /// Selection is intentionally separate from the file-tree publisher. Selecting a document is
@@ -43,6 +50,12 @@ final class VaultStore: ObservableObject {
     /// Compatibility access for non-UI services and tests. UI observers use `selection` so a
     /// selection change does not publish through this store and rebuild the whole file tree.
     let selection = VaultSelection()
+    let knowledge = VaultKnowledgeIndex()
+    @Published var showKnowledge = false
+    @Published var showCommandPalette = false
+    @Published var showWorkspaces = false
+    @Published var lastLinkMutation: VaultLinkMutation?
+    var pendingNoteFragment: (url: URL, fragment: String)?
     var selectedFileURL: URL? {
         get { selection.fileURL }
         set { selection.fileURL = newValue }
@@ -90,6 +103,8 @@ final class VaultStore: ObservableObject {
 
     /// The most recent filesystem move, used by the desktop tab bar to update open tabs.
     @Published var lastDocumentMove: VaultDocumentMove?
+    @Published var lastDeletedURL: URL?
+    @Published var operationError: String?
 
     /// Recently-opened vault folders, most-recent first (Obsidian-style vault switcher).
     @Published var recentVaults: [URL] = []
@@ -114,7 +129,7 @@ final class VaultStore: ObservableObject {
     private var childOrders: [String: [String]] = [:]
     /// Save requests are serialized off the main actor. A revision prevents an older
     /// debounced request from overwriting a newer edit when disk writes finish out of order.
-    private var saveRevisions: [String: UInt64] = [:]
+    private static var saveRevision: UInt64 = 0
     /// Tracks the app's own writes so the FSEvents watcher can ignore the autosave that
     /// triggered them instead of rebuilding the whole vault.
     private var writeEventFilter = VaultWriteEventFilter()
@@ -477,6 +492,10 @@ final class VaultStore: ObservableObject {
             scheduleAutoRefresh()
             return
         }
+        if let root = rootURL {
+            let history = root.appendingPathComponent(".clipnest/history").path
+            if paths.allSatisfy({ $0 == history || $0.hasPrefix(history + "/") }) { return }
+        }
         guard !writeEventFilter.isSelfWriteNoise(paths: paths) else { return }
 
         if isStructuralChange(paths: paths, flags: flags) {
@@ -526,16 +545,31 @@ final class VaultStore: ObservableObject {
     }
 
     func save(_ text: String, to url: URL) {
-        let key = url.standardizedFileURL.path
-        let revision = (saveRevisions[key] ?? 0) + 1
-        saveRevisions[key] = revision
+        Self.saveRevision &+= 1
+        let revision = Self.saveRevision
+        let expectedRoot = rootURL
         // Remember this write so the FSEvents watcher can drop the event it is about to
         // receive instead of rebuilding the whole vault for our own autosave.
         noteInternalWrite(to: url)
-        applySelfWriteToSnapshot(url: url)
-        Task.detached(priority: .utility) {
-            try? await VaultFileAccess.shared.write(Data(text.utf8), to: url, revision: revision)
+        VaultFileAccess.enqueueExistingText(text, to: url, revision: revision, historyRoot: expectedRoot) { [weak self] result in
+            Task { @MainActor [weak self] in
+                guard let self, self.rootURL == expectedRoot else { return }
+                switch result {
+                case .success(let written):
+                    guard let written else { return }
+                    self.noteInternalWrite(to: written)
+                    self.applySelfWriteToSnapshot(url: written)
+                    self.notifyFileChanges([written])
+                case .failure(let error):
+                    self.operationError = error.localizedDescription
+                }
+            }
         }
+    }
+
+    func notifyFileChanges(_ urls: [URL]) {
+        NotificationCenter.default.post(name: .vaultFilesDidChange, object: self,
+                                        userInfo: ["paths": urls.map(\.path)])
     }
 
     /// Records a write the app performed itself so the macOS FSEvents watcher ignores the
@@ -591,7 +625,8 @@ final class VaultStore: ObservableObject {
         let destination = uniqueURL(in: destinationDirectory, name: source.lastPathComponent)
 
         do {
-            try FileManager.default.moveItem(at: source, to: destination)
+            let mutation = try VaultFileAccess.moveUpdatingLinks(at: source, to: destination, root: rootURL!)
+            lastLinkMutation = mutation
             updateOrderAfterMoving(source: source,
                                    destination: destination,
                                    sourceDirectory: sourceParent,
@@ -600,9 +635,12 @@ final class VaultStore: ObservableObject {
                 selectedFileURL = destination
             }
             lastDocumentMove = VaultDocumentMove(source: source, destination: destination)
+            knowledge.relocateBookmarks(lastDocumentMove!)
             refresh()
+            notifyFileChanges([source, destination] + mutation.rewrittenFiles)
             return destination
         } catch {
+            operationError = error.localizedDescription
             return nil
         }
     }
@@ -668,43 +706,61 @@ final class VaultStore: ObservableObject {
 
     @discardableResult
     func createFile(named rawName: String, in directory: URL? = nil) -> URL? {
-        guard let dir = directory ?? targetDirectory() else { return nil }
+        guard let dir = directory ?? targetDirectory(), isInsideVault(dir) else { return nil }
         var name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.isEmpty { name = "Untitled" }
+        guard validateItemName(name) else { return nil }
         if (name as NSString).pathExtension.isEmpty { name += ".md" }
         let url = uniqueURL(in: dir, name: name)
-        FileManager.default.createFile(atPath: url.path, contents: Data("# \(url.deletingPathExtension().lastPathComponent)\n\n".utf8))
+        do {
+            try VaultFileAccess.createText("# \(url.deletingPathExtension().lastPathComponent)\n\n", at: url)
+        } catch {
+            operationError = error.localizedDescription
+            return nil
+        }
         noteInternalWrite(to: url)
         refresh()
         selectedFileURL = url
+        notifyFileChanges([url])
         return url
     }
 
     @discardableResult
     func createFolder(named rawName: String, in directory: URL? = nil) -> URL? {
-        guard let dir = directory ?? targetDirectory() else { return nil }
+        guard let dir = directory ?? targetDirectory(), isInsideVault(dir) else { return nil }
         var name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.isEmpty { name = "New Folder" }
+        guard validateItemName(name) else { return nil }
         let url = uniqueURL(in: dir, name: name)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        } catch {
+            operationError = error.localizedDescription
+            return nil
+        }
         noteInternalWrite(to: url)
         refresh()
         return url
     }
 
-    func delete(_ url: URL) {
-        // Vault items go to the in-vault recycle bin so mistakes can be restored;
-        // anything outside the vault still falls back to the system behavior.
-        var trashed = false
-        if let root = rootURL, VaultTrash.isInside(url, root: root) {
-            trashed = (try? VaultTrash.moveToTrash(url, in: root)) != nil
-        }
-        if !trashed {
-            try? FileManager.default.trashOrRemove(url)
+    @discardableResult
+    func delete(_ url: URL) -> Bool {
+        guard let root = rootURL, isVaultItem(url) else { return false }
+        let affected = editableFiles(under: url)
+        do {
+            try VaultFileAccess.performMutation { _ = try VaultTrash.moveToTrash(url, in: root) }
+        } catch {
+            operationError = error.localizedDescription
+            return false
         }
         removeChildOrderPaths(under: url)
-        if selectedFileURL == url { selectedFileURL = nil }
+        if let selected = selectedFileURL, isPathInside(canonicalPath(selected), canonicalPath(url)) {
+            selectedFileURL = nil
+        }
+        lastDeletedURL = url.standardizedFileURL
         refresh()
+        notifyFileChanges(affected)
+        return true
     }
 
     func trashEntries() -> [TrashEntry] {
@@ -714,39 +770,119 @@ final class VaultStore: ObservableObject {
 
     func restoreFromTrash(_ entry: TrashEntry) {
         guard let rootURL else { return }
-        try? VaultTrash.restore(entry, in: rootURL)
-        refresh()
+        do {
+            let destination = try VaultFileAccess.performMutation { try VaultTrash.restore(entry, in: rootURL) }
+            refresh()
+            notifyFileChanges(editableFiles(under: destination))
+        } catch { operationError = error.localizedDescription }
     }
 
     func purgeFromTrash(_ entry: TrashEntry) {
         guard let rootURL else { return }
-        try? VaultTrash.purge(entry, in: rootURL)
+        do { try VaultTrash.purge(entry, in: rootURL) }
+        catch { operationError = error.localizedDescription }
         refresh()
     }
 
     func purgeAllTrash() {
         guard let rootURL else { return }
-        try? VaultTrash.purgeAll(in: rootURL)
+        do { try VaultTrash.purgeAll(in: rootURL) }
+        catch { operationError = error.localizedDescription }
         refresh()
     }
 
     @discardableResult
     func rename(_ url: URL, to rawName: String) -> URL? {
         var name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return nil }
+        guard isVaultItem(url), validateItemName(name) else { return nil }
         let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
         if !isDir && (name as NSString).pathExtension.isEmpty {
             let oldExt = url.pathExtension
             if !oldExt.isEmpty { name += "." + oldExt }
         }
         let dest = url.deletingLastPathComponent().appendingPathComponent(name)
+        if dest.standardizedFileURL == url.standardizedFileURL { return dest }
+        let affected = editableFiles(under: url)
         do {
-            try FileManager.default.moveItem(at: url, to: dest)
+            let mutation = try VaultFileAccess.moveUpdatingLinks(at: url, to: dest, root: rootURL!)
+            lastLinkMutation = mutation
             rewriteChildOrderPaths(from: url, to: dest)
-            if selectedFileURL == url { selectedFileURL = dest }
+            let move = VaultDocumentMove(source: url, destination: dest)
+            if let selected = selectedFileURL {
+                let relocated = move.relocated(selected)
+                if relocated != selected { selectedFileURL = relocated }
+            }
+            lastDocumentMove = move
+            knowledge.relocateBookmarks(move)
             refresh()
+            notifyFileChanges(affected + affected.map { move.relocated($0) } + mutation.rewrittenFiles)
             return dest
-        } catch { return nil }
+        } catch {
+            operationError = error.localizedDescription
+            return nil
+        }
+    }
+
+    private func validateItemName(_ name: String) -> Bool {
+        guard !name.isEmpty, name != ".", name != "..", !name.hasPrefix("."),
+              !name.contains("/"), !name.contains(":"), !name.contains("\\"),
+              !name.contains(where: { "[]|#^".contains($0) }),
+              name.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else {
+            operationError = String(localized: "Enter a visible file or folder name without path separators.")
+            return false
+        }
+        return true
+    }
+
+    /// UI callers scan and rewrite references off the main actor. The synchronous methods
+    /// remain available to command-line callers and deterministic filesystem tests.
+    func renameWithLinks(_ url: URL, to rawName: String) async -> URL? {
+        var name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let root = rootURL, isVaultItem(url), validateItemName(name) else { return nil }
+        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        if !isDirectory, (name as NSString).pathExtension.isEmpty, !url.pathExtension.isEmpty { name += "." + url.pathExtension }
+        let destination = url.deletingLastPathComponent().appendingPathComponent(name)
+        if destination == url { return destination }
+        return await performLinkedMove(source: url, destination: destination, root: root, rename: true)
+    }
+
+    func moveWithLinks(_ url: URL, to directory: URL) async -> URL? {
+        guard let root = rootURL, isVaultItem(url), isInsideVault(directory),
+              (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true,
+              (try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
+              url.deletingLastPathComponent().standardizedFileURL != directory.standardizedFileURL else { return nil }
+        let destination = uniqueURL(in: directory, name: url.lastPathComponent)
+        return await performLinkedMove(source: url, destination: destination, root: root, rename: false)
+    }
+
+    private func performLinkedMove(source: URL, destination: URL, root: URL, rename: Bool) async -> URL? {
+        do {
+            let mutation = try await Task.detached(priority: .userInitiated) {
+                try VaultFileAccess.moveUpdatingLinks(at: source, to: destination, root: root)
+            }.value
+            guard rootURL == root else { return destination }
+            let move = VaultDocumentMove(source: source, destination: destination)
+            if rename { rewriteChildOrderPaths(from: source, to: destination) }
+            else { updateOrderAfterMoving(source: source, destination: destination,
+                sourceDirectory: source.deletingLastPathComponent(), destinationDirectory: destination.deletingLastPathComponent()) }
+            lastLinkMutation = mutation
+            if let selected = selectedFileURL { selectedFileURL = move.relocated(selected) }
+            lastDocumentMove = move
+            knowledge.relocateBookmarks(move)
+            refresh()
+            let affected = mutation.files.filter { move.relocated($0) != $0 }
+            notifyFileChanges(affected + affected.map { move.relocated($0) } + mutation.rewrittenFiles)
+            return destination
+        } catch { if rootURL == root { operationError = error.localizedDescription }; return nil }
+    }
+
+    private func isVaultItem(_ url: URL) -> Bool {
+        isInsideVault(url) && url.standardizedFileURL != rootURL?.standardizedFileURL
+    }
+
+    private func editableFiles(under url: URL) -> [URL] {
+        if FileNode.editableExtensions.contains(url.pathExtension.lowercased()) { return [url] }
+        return homeSnapshot.markdownFiles.filter { isPathInside(canonicalPath($0), canonicalPath(url)) }
     }
 
     private func uniqueURL(in dir: URL, name: String) -> URL {
@@ -834,6 +970,7 @@ final class VaultStore: ObservableObject {
         guard let rootURL else { return false }
         let root = canonicalPath(rootURL)
         return isPathInside(canonicalPath(url), root)
+            && isPathInside(url.resolvingSymlinksInPath().path, rootURL.resolvingSymlinksInPath().path)
     }
 
     private func appendDirectories(from node: FileNode, to result: inout [URL]) {

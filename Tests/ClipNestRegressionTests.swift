@@ -98,11 +98,13 @@ final class ClipNestRegressionTests: XCTestCase {
         XCTAssertEqual(store.homeSnapshot.markdownFiles.first?.lastPathComponent, "Newest.md")
 
         store.save("updated body", to: oldest)
-        // The in-memory snapshot reorders synchronously; the disk write is detached.
-        XCTAssertEqual(store.homeSnapshot.markdownFiles.first?.lastPathComponent, "Oldest.md",
+        // Only a successful write should move the note to the top of the snapshot.
+        let deadline = Date().addingTimeInterval(5)
+        while store.homeSnapshot.markdownFiles.first != oldest, Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(store.homeSnapshot.markdownFiles.first, oldest,
                        "A saved note must become the most recent note without a full vault refresh")
-
-        try await Task.sleep(nanoseconds: 400_000_000)
         let written = try await store.loadText(oldest)
         XCTAssertEqual(written, "updated body")
         XCTAssertEqual(store.homeSnapshot.markdownFiles.count, 3,

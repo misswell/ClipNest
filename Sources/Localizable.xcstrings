@@ -2316,7 +2316,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "查看"
+            "value": "视图"
           }
         }
       }
@@ -2516,7 +2516,1377 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "当前"
+            "value": "当前位置"
+          }
+        }
+      }
+    },
+    "Rename Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重命名笔记"
+          }
+        }
+      }
+    },
+    "File Operation Failed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件操作失败"
+          }
+        }
+      }
+    },
+    "Move to Folder…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移动到文件夹…"
+          }
+        }
+      }
+    },
+    "Move Document": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移动文档"
+          }
+        }
+      }
+    },
+    "Cannot Move Document": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法移动文档"
+          }
+        }
+      }
+    },
+    "The item could not be renamed.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法重命名，请检查名称或文件夹权限。"
+          }
+        }
+      }
+    },
+    "Enter a visible file or folder name without path separators.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入可见的文件或文件夹名称，不要使用路径分隔符。"
+          }
+        }
+      }
+    },
+    "The destination is unavailable or already contains an invalid path.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目标文件夹不可用，或路径无效。"
+          }
+        }
+      }
+    },
+    "The document could not be moved.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法移动该文档。"
+          }
+        }
+      }
+    },
+    "Knowledge": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "知识库"
+          }
+        }
+      }
+    },
+    "Notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记"
+          }
+        }
+      }
+    },
+    "Bookmarks": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "书签"
+          }
+        }
+      }
+    },
+    "Tags": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签"
+          }
+        }
+      }
+    },
+    "Graph": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关系图"
+          }
+        }
+      }
+    },
+    "Templates": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模板"
+          }
+        }
+      }
+    },
+    "Properties": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "属性"
+          }
+        }
+      }
+    },
+    "Updating note index…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在更新笔记索引…"
+          }
+        }
+      }
+    },
+    "Search notes, tag: or path:": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索笔记，可使用 tag: 或 path:"
+          }
+        }
+      }
+    },
+    "Knowledge Actions": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "知识库操作"
+          }
+        }
+      }
+    },
+    "New Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建笔记"
+          }
+        }
+      }
+    },
+    "Open Daily Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开每日笔记"
+          }
+        }
+      }
+    },
+    "Random Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "随机笔记"
+          }
+        }
+      }
+    },
+    "New Template": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建模板"
+          }
+        }
+      }
+    },
+    "New Canvas": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建画布"
+          }
+        }
+      }
+    },
+    "Note Library Settings": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记库设置"
+          }
+        }
+      }
+    },
+    "Relative path": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相对路径"
+          }
+        }
+      }
+    },
+    "Open a vault to browse notes.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开文件夹后即可浏览笔记。"
+          }
+        }
+      }
+    },
+    "No matching notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有符合条件的笔记"
+          }
+        }
+      }
+    },
+    "Index Status": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "索引状态"
+          }
+        }
+      }
+    },
+    "Some notes could not be indexed. Open an iCloud note to download it, then refresh.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分笔记未能建立索引。可先打开 iCloud 笔记完成下载，再刷新。"
+          }
+        }
+      }
+    },
+    "Details (%lld)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "详情（%lld）"
+          }
+        }
+      }
+    },
+    "Sort by property name": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按属性名称排序"
+          }
+        }
+      }
+    },
+    "Remove Bookmark": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除书签"
+          }
+        }
+      }
+    },
+    "Add Bookmark": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加书签"
+          }
+        }
+      }
+    },
+    "Words: %lld · Characters: %lld": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "词数：%lld · 字符数：%lld"
+          }
+        }
+      }
+    },
+    "Outline": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大纲"
+          }
+        }
+      }
+    },
+    "No headings": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有标题"
+          }
+        }
+      }
+    },
+    "Edit Properties": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑属性"
+          }
+        }
+      }
+    },
+    "Outgoing Links": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出链"
+          }
+        }
+      }
+    },
+    "Unresolved link": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未解析的链接"
+          }
+        }
+      }
+    },
+    "Backlinks": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "反向链接"
+          }
+        }
+      }
+    },
+    "No backlinks": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有反向链接"
+          }
+        }
+      }
+    },
+    "Create Markdown templates in your Templates folder.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在模板文件夹中创建 Markdown 模板。"
+          }
+        }
+      }
+    },
+    "File Recovery": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "版本恢复"
+          }
+        }
+      }
+    },
+    "Previous versions appear after you edit and save this note.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑并保存后，此处会显示笔记的历史版本。"
+          }
+        }
+      }
+    },
+    "Note Details": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记详情"
+          }
+        }
+      }
+    },
+    "Previous Version": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "历史版本"
+          }
+        }
+      }
+    },
+    "Edit YAML properties without changing the note body. Existing lists and custom fields are preserved.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑 YAML 属性，正文保持原样。已有列表和自定义字段会保留。"
+          }
+        }
+      }
+    },
+    "%lld notes · Tap a note to open": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 篇笔记 · 点按打开"
+          }
+        }
+      }
+    },
+    "Showing the first 120 matches. Search to narrow the graph.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "展示前 120 个匹配结果，可通过搜索缩小范围。"
+          }
+        }
+      }
+    },
+    "Not downloaded": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未下载"
+          }
+        }
+      }
+    },
+    "Note exceeds the 2 MB index limit": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记超过 2 MB 索引上限"
+          }
+        }
+      }
+    },
+    "Enter a relative note path inside this vault.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入当前笔记库内的相对笔记路径。"
+          }
+        }
+      }
+    },
+    "A linked note changed during the move. Please retry.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移动过程中有引用笔记被修改，请重试。"
+          }
+        }
+      }
+    },
+    "A linked note changed during rollback.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回滚过程中有引用笔记被修改。"
+          }
+        }
+      }
+    },
+    "History must remain inside the vault.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "历史版本必须保存在当前笔记库内。"
+          }
+        }
+      }
+    },
+    "Template folder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模板文件夹"
+          }
+        }
+      }
+    },
+    "Variables: {{title}}, {{date}}, {{time}}, {{date:yyyy-MM-dd}}": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可用变量：{{title}}、{{date}}、{{time}}、{{date:yyyy-MM-dd}}"
+          }
+        }
+      }
+    },
+    "Daily Notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每日笔记"
+          }
+        }
+      }
+    },
+    "Daily note folder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每日笔记文件夹"
+          }
+        }
+      }
+    },
+    "Date format": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日期格式"
+          }
+        }
+      }
+    },
+    "Template path (optional)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模板路径（可选）"
+          }
+        }
+      }
+    },
+    "Paths are relative to the vault. Existing daily notes are opened without being overwritten.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "路径以笔记库为基准。已有每日笔记会直接打开，不会覆盖。"
+          }
+        }
+      }
+    },
+    "Up to 50 previous versions per note are saved locally in .clipnest/history. They remain in your vault.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每篇笔记最多保留 50 个历史版本，保存在笔记库的 .clipnest/history 中。"
+          }
+        }
+      }
+    },
+    "Enter properties without YAML delimiters.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请填写属性内容，不要包含 YAML 分隔符。"
+          }
+        }
+      }
+    },
+    "Open the note to view deeper embeds.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开原笔记以查看更深层的嵌入。"
+          }
+        }
+      }
+    },
+    "The referenced block was not found.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到引用的文本块。"
+          }
+        }
+      }
+    },
+    "The referenced heading was not found.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到引用的标题。"
+          }
+        }
+      }
+    },
+    "Create Linked Note?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建链接笔记？"
+          }
+        }
+      }
+    },
+    "Updating links…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在更新链接…"
+          }
+        }
+      }
+    },
+    "Start Presentation": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开始演示"
+          }
+        }
+      }
+    },
+    "Previous Slide": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上一页"
+          }
+        }
+      }
+    },
+    "Next Slide": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一页"
+          }
+        }
+      }
+    },
+    "Command Palette": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令面板"
+          }
+        }
+      }
+    },
+    "Search commands": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索命令"
+          }
+        }
+      }
+    },
+    "Unique Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建唯一编号笔记"
+          }
+        }
+      }
+    },
+    "Refresh Vault": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新笔记库"
+          }
+        }
+      }
+    },
+    "Internal Link": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内部链接"
+          }
+        }
+      }
+    },
+    "Callout": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提示块"
+          }
+        }
+      }
+    },
+    "Add Card": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加卡片"
+          }
+        }
+      }
+    },
+    "File": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件"
+          }
+        }
+      }
+    },
+    "Web Link": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页链接"
+          }
+        }
+      }
+    },
+    "Group": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分组"
+          }
+        }
+      }
+    },
+    "Choose a destination card": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请选择目标卡片"
+          }
+        }
+      }
+    },
+    "Open Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开笔记"
+          }
+        }
+      }
+    },
+    "Open Link": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开链接"
+          }
+        }
+      }
+    },
+    "Connect Card": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接卡片"
+          }
+        }
+      }
+    },
+    "Delete Card": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除卡片"
+          }
+        }
+      }
+    },
+    "Delete Card?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除卡片？"
+          }
+        }
+      }
+    },
+    "Edit Card": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑卡片"
+          }
+        }
+      }
+    },
+    "Width": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "宽度"
+          }
+        }
+      }
+    },
+    "Height": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高度"
+          }
+        }
+      }
+    },
+    "Compose Notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "组合笔记"
+          }
+        }
+      }
+    },
+    "Action": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作"
+          }
+        }
+      }
+    },
+    "Extract Section": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提取章节"
+          }
+        }
+      }
+    },
+    "Merge Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合并笔记"
+          }
+        }
+      }
+    },
+    "Destination Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目标笔记"
+          }
+        }
+      }
+    },
+    "Choose a note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择笔记"
+          }
+        }
+      }
+    },
+    "The source note moves to Trash after a successful merge. Linked notes are updated. Duplicate headings must be renamed first.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合并成功后，源笔记移入回收站，并更新引用链接。请先修改重复的章节标题。"
+          }
+        }
+      }
+    },
+    "Section": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "章节"
+          }
+        }
+      }
+    },
+    "Choose a section": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择章节"
+          }
+        }
+      }
+    },
+    "New note path": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新笔记路径"
+          }
+        }
+      }
+    },
+    "The section and its subsections move into a new note. A link replaces the extracted content.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所选章节及其子章节移入新笔记，原位置保留链接。"
+          }
+        }
+      }
+    },
+    "Updating notes…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在更新笔记…"
+          }
+        }
+      }
+    },
+    "Merge": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合并"
+          }
+        }
+      }
+    },
+    "Extract": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提取"
+          }
+        }
+      }
+    },
+    "Merge this note into the destination?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将此笔记合并到目标笔记？"
+          }
+        }
+      }
+    },
+    "The note changed. Reload it before composing notes.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记内容已变化，请重新加载后再组合笔记。"
+          }
+        }
+      }
+    },
+    "Rename duplicate headings before merging to preserve heading links.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先修改重复的章节标题，以保留指向标题的链接。"
+          }
+        }
+      }
+    },
+    "Record Audio": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录制音频"
+          }
+        }
+      }
+    },
+    "Audio Recorder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音"
+          }
+        }
+      }
+    },
+    "Stop and Save Recording": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止并保存录音"
+          }
+        }
+      }
+    },
+    "Start Recording": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开始录音"
+          }
+        }
+      }
+    },
+    "Recordings are saved as audio attachments in your vault.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音会作为音频附件保存在当前笔记库内。"
+          }
+        }
+      }
+    },
+    "Microphone access is disabled. Enable it in system settings to record audio.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风权限未开启，请在系统设置中启用后录音。"
+          }
+        }
+      }
+    },
+    "The vault is no longer available.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前笔记库已不可用。"
+          }
+        }
+      }
+    },
+    "Footnotes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "脚注"
+          }
+        }
+      }
+    },
+    "Workspaces": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区"
+          }
+        }
+      }
+    },
+    "Workspace name": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区名称"
+          }
+        }
+      }
+    },
+    "Save Layout": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存布局"
+          }
+        }
+      }
+    },
+    "Load": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "载入"
+          }
+        }
+      }
+    },
+    "Delete Workspace?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除工作区？"
+          }
+        }
+      }
+    },
+    "Saving an existing name updates that layout. Terminal visibility is saved; running commands are not restarted.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用已有名称会更新该布局。终端显示状态会保存，正在运行的命令不会重新启动。"
+          }
+        }
+      }
+    },
+    "New Base": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建数据视图"
+          }
+        }
+      }
+    },
+    "Edit Base": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑数据视图"
+          }
+        }
+      }
+    },
+    "Edit Property": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑属性"
+          }
+        }
+      }
+    },
+    "Use YAML values: text, number, true/false, or a list such as [a, b].": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 YAML 值：文本、数字、true/false 或 [a, b] 这样的列表。"
+          }
+        }
+      }
+    },
+    "Preview Attachment": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览附件"
+          }
+        }
+      }
+    },
+    "Unsupported summary": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂不支持该汇总"
+          }
+        }
+      }
+    },
+    "Properties exceed the 128 KB limit.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "属性超过 128 KB 限制。"
+          }
+        }
+      }
+    },
+    "Remove duplicate property keys before editing.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先删除重复的属性键。"
+          }
+        }
+      }
+    },
+    "The base must define at least one view.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数据视图至少需要定义一个视图。"
+          }
+        }
+      }
+    },
+    "This base view type is not supported.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂不支持这种数据视图类型。"
+          }
+        }
+      }
+    },
+    "Invalid base row limit.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数据视图的行数限制无效。"
+          }
+        }
+      }
+    },
+    "The property changed. Refresh before editing it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "属性已发生变化，请刷新后再编辑。"
+          }
+        }
+      }
+    },
+    "Local Graph": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "局部关系图"
+          }
+        }
+      }
+    },
+    "Page Preview": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "页面预览"
           }
         }
       }

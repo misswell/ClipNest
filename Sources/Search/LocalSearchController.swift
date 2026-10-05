@@ -63,6 +63,9 @@ final class LocalSearchController: ObservableObject {
         guard standardized != vaultRoot else { return }
         searchTask?.cancel()
         indexingTask?.cancel()
+        incrementalWork?.cancel()
+        pendingChangedPaths.removeAll()
+        isIndexing = false
         database?.close()
         database = nil
         indexer = nil
@@ -108,6 +111,9 @@ final class LocalSearchController: ObservableObject {
     /// The indexer is immutable, so a settings change swaps it for a new one.
     private func recreateIndexer() {
         guard let vaultRoot, let database else { return }
+        indexingTask?.cancel()
+        searchTask?.cancel()
+        isIndexing = false
         indexer = LocalSearchIndexer(vaultRoot: vaultRoot,
                                      database: database,
                                      semanticSearchEnabled: semanticEnabled)
@@ -128,7 +134,7 @@ final class LocalSearchController: ObservableObject {
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 // A vault switch during the pass invalidates everything it produced.
-                guard expectedVault == self.vaultRoot else { return }
+                guard expectedVault == self.vaultRoot, self.indexer === indexer else { return }
                 self.statistics = stats
                 self.isIndexing = false
                 self.didIndexThisSession = true
@@ -146,7 +152,7 @@ final class LocalSearchController: ObservableObject {
             _ = await indexer.reindex(fileAt: url)
             let loaded = await indexer.loadSemanticIndex()
             await MainActor.run { [weak self] in
-                guard let self else { return }
+                guard let self, self.indexer === indexer else { return }
                 self.indexedChunkCount = self.database?.chunkCount() ?? 0
                 self.semanticIndex = loaded
                 self.scheduleSearch()
@@ -160,7 +166,7 @@ final class LocalSearchController: ObservableObject {
             await indexer.removeFile(at: url)
             let loaded = await indexer.loadSemanticIndex()
             await MainActor.run { [weak self] in
-                guard let self else { return }
+                guard let self, self.indexer === indexer else { return }
                 self.indexedChunkCount = self.database?.chunkCount() ?? 0
                 self.semanticIndex = loaded
                 self.scheduleSearch()
@@ -177,8 +183,11 @@ final class LocalSearchController: ObservableObject {
     // MARK: - Incremental updates
 
     private func enqueueIncremental(paths: [String]) {
-        guard database != nil else { return }
-        pendingChangedPaths.formUnion(paths)
+        guard database != nil, let vaultRoot else { return }
+        let rootPath = vaultRoot.standardizedFileURL.path
+        pendingChangedPaths.formUnion(paths.filter {
+            URL(fileURLWithPath: $0).standardizedFileURL.path.hasPrefix(rootPath + "/")
+        })
         incrementalWork?.cancel()
         incrementalWork = Task { [weak self] in
             // Let a burst of autosaves settle before touching the index.
@@ -211,7 +220,7 @@ final class LocalSearchController: ObservableObject {
             guard changed else { return }
             let loaded = await indexer.loadSemanticIndex()
             await MainActor.run { [weak self] in
-                guard let self else { return }
+                guard let self, self.indexer === indexer else { return }
                 self.indexedChunkCount = self.database?.chunkCount() ?? 0
                 self.semanticIndex = loaded
                 self.scheduleSearch()

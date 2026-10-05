@@ -112,7 +112,7 @@ final class TrashTests: XCTestCase {
                                 displayName: entries[0].displayName,
                                 isDirectory: entries[0].isDirectory,
                                 deletedAt: Date().addingTimeInterval(-40 * 24 * 60 * 60))
-        VaultTrash.saveManifest(entries, in: root)
+        try VaultTrash.saveManifest(entries, in: root)
 
         VaultTrash.purgeOlderThan(Date().addingTimeInterval(-VaultTrash.autoPurgeInterval), in: root)
 

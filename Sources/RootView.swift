@@ -10,7 +10,20 @@ struct RootView: View {
 
     var body: some View {
         content
+            .environmentObject(store.knowledge)
+            .sheet(isPresented: $store.showCommandPalette) { NoteCommandPalette() }
+            #if os(iOS)
+            .sheet(isPresented: $store.showKnowledge) { KnowledgeHubView() }
+            #endif
             .tint(Theme.accent)
+            .alert("File Operation Failed", isPresented: Binding(
+                get: { store.operationError != nil },
+                set: { if !$0 { store.operationError = nil } }
+            )) {
+                Button("OK", role: .cancel) { store.operationError = nil }
+            } message: {
+                Text(store.operationError ?? "")
+            }
             .overlay(alignment: .top) {
                 if captureCoordinator.showsStatusBanner {
                     CaptureProgressView()
@@ -49,10 +62,12 @@ struct RootView: View {
             .task {
                 await captureCoordinator.start()
                 search.attach(vaultRoot: store.rootURL)
+                store.knowledge.attach(store.rootURL)
                 search.indexIfNeeded()
             }
             .onChange(of: store.rootURL) { _, newRoot in
                 search.attach(vaultRoot: newRoot)
+                store.knowledge.attach(newRoot)
                 search.indexIfNeeded()
             }
             .onChange(of: scenePhase) { _, phase in
@@ -83,6 +98,9 @@ struct RootView: View {
             DocumentTimelineView()
                 .tabItem { Label("Timeline", systemImage: "clock") }
                 .tag(1)
+            KnowledgeHubView()
+                .tabItem { Label("Knowledge", systemImage: "point.3.connected.trianglepath.dotted") }
+                .tag(3)
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
                 .tag(2)

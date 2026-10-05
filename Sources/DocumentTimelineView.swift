@@ -5,7 +5,7 @@ import SwiftUI
 /// recursive filesystem scan or a document-body read.
 struct DocumentTimelineView: View {
     @EnvironmentObject private var store: VaultStore
-    @State private var navigationPath = NavigationPath()
+    @State private var navigationPath: [URL] = []
     @State private var timelineSections: [TimelineSection] = []
     @State private var isPreparingTimeline = false
     @State private var preparedSnapshotRevision: UInt64?
@@ -54,10 +54,15 @@ struct DocumentTimelineView: View {
             // pushed here while only the Vault tab reacted. Pop back to the list instead.
             SelectionClearWatcher(selection: store.selection) {
                 if !navigationPath.isEmpty {
-                    navigationPath = NavigationPath()
+                    navigationPath = []
                 }
             }
         )
+        .onChange(of: store.lastDocumentMove) { _, move in
+            guard let move else { return }
+            navigationPath = navigationPath.map { move.relocated($0) }
+        }
+        .onChange(of: store.rootURL) { _, _ in navigationPath = [] }
         .task {
             store.restoreVaultIfNeeded()
         }

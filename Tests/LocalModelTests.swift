@@ -37,6 +37,8 @@ final class FakeModelServer: ModelDownloadTransport, @unchecked Sendable {
         var corrupt = false
         /// Reply 200 with the whole file even when a Range was asked for.
         var ignoreRange = false
+        var emptyBody = false
+        var shortFullBody = false
     }
 
     let manifestJSON: Data
@@ -108,6 +110,8 @@ final class FakeModelServer: ModelDownloadTransport, @unchecked Sendable {
         if fault.corrupt {
             served = Data(repeating: 0xAB, count: served.count)
         }
+        if fault.emptyBody { served = Data() }
+        if fault.shortFullBody { served = served.prefix(served.count / 2) }
         return (served, response(url: url, status: status, total: body.count))
     }
 
@@ -250,6 +254,43 @@ final class ModelDownloaderTests: XCTestCase {
 
         XCTAssertFalse(store.isInstalled())
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.modelDirectory.path))
+        server.fault.corrupt = false
+        _ = try await run(downloader(store: store, server: server), manifest: manifest,
+                          baseURL: URL(string: "https://cdn.example.com/m/")!)
+        XCTAssertTrue(store.isInstalled(), "Retry must recover from a checksum failure")
+    }
+
+    func testAnEmptyPartialResponseFailsInsteadOfLooping() async throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = ["model.safetensors": Data(repeating: 0x44, count: 300)]
+        let manifest = makeManifest(files: files)
+        let server = FakeModelServer(manifest: manifest, files: files, fault: .init(emptyBody: true))
+        do {
+            _ = try await run(downloader(store: store, server: server), manifest: manifest,
+                              baseURL: URL(string: "https://cdn.example.com/m/")!)
+            XCTFail("An empty response must fail")
+        } catch let error as LocalModelDownloadError {
+            XCTAssertEqual(error, .shortResponse(expected: testChunkSize, received: 0))
+        }
+        XCTAssertEqual(server.requests.count, 1)
+    }
+
+    func testAShortFullResponseFailsInsteadOfLooping() async throws {
+        let (store, root) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = ["model.safetensors": Data(repeating: 0x44, count: 300)]
+        let manifest = makeManifest(files: files)
+        let server = FakeModelServer(manifest: manifest, files: files,
+                                     fault: .init(ignoreRange: true, shortFullBody: true))
+        do {
+            _ = try await run(downloader(store: store, server: server), manifest: manifest,
+                              baseURL: URL(string: "https://cdn.example.com/m/")!)
+            XCTFail("A short HTTP 200 response must fail")
+        } catch let error as LocalModelDownloadError {
+            XCTAssertEqual(error, .shortResponse(expected: 300, received: 150))
+        }
+        XCTAssertEqual(server.requests.count, 1)
     }
 
     /// A truncated file must be detected by the size check before hashing.

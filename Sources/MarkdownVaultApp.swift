@@ -17,6 +17,7 @@ struct MarkdownVaultApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .environmentObject(store.knowledge)
                 .environmentObject(store.selection)
                 .environmentObject(captureCoordinator)
                 .environmentObject(search)
@@ -50,6 +51,18 @@ struct MarkdownVaultApp: App {
                     NotificationCenter.default.post(name: .toggleTerminal, object: nil)
                 }
                 .keyboardShortcut("`", modifiers: [.control])
+            }
+            CommandMenu("Notes") {
+                Button("Workspaces") { store.showWorkspaces = true }
+                Button("Command Palette") { store.showCommandPalette = true }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                Button("Knowledge") { store.showKnowledge = true }
+                    .keyboardShortcut("k", modifiers: [.command, .shift])
+                Button("Open Daily Note") { store.openDailyNote() }
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                Button("Random Note") {
+                    if let url = store.homeSnapshot.markdownFiles.randomElement() { store.selectedFileURL = url }
+                }
             }
             CommandMenu("Capture") {
                 Button("Quick Paste") {

@@ -18,10 +18,14 @@ enum MarkdownBlock: Sendable {
 /// Obsidian/Bear notes: headings, lists, checklists, fenced code, block-quotes, pipe tables,
 /// images (`![alt](src)` and Obsidian `![[embed]]`), and horizontal rules.
 enum MarkdownParser {
-    static func parse(_ markdown: String) -> [MarkdownBlock] {
+    static func parse(_ markdown: String, onChecklistLine: ((Int) -> Void)? = nil) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
         let lines = markdown.components(separatedBy: "\n")
         var i = 0
+        if let range = MarkdownKnowledge.frontmatterRange(in: markdown) {
+            let prefix = (markdown as NSString).substring(with: range)
+            i = prefix.components(separatedBy: "\n").count - (prefix.hasSuffix("\n") ? 1 : 0)
+        }
         var para: [String] = []
 
         func flushParagraph() {
@@ -36,12 +40,13 @@ enum MarkdownParser {
             let t = line.trimmingCharacters(in: .whitespaces)
 
             // Fenced code block
-            if t.hasPrefix("```") {
+            if t.hasPrefix("```") || t.hasPrefix("~~~") {
                 flushParagraph()
-                let lang = String(t.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                let fence = String(t.prefix(while: { $0 == t.first }))
+                let lang = String(t.dropFirst(fence.count)).trimmingCharacters(in: .whitespaces)
                 var code: [String] = []
                 i += 1
-                while i < lines.count, !lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                while i < lines.count, !lines[i].trimmingCharacters(in: .whitespaces).hasPrefix(fence) {
                     code.append(lines[i]); i += 1
                 }
                 i += 1 // closing fence
@@ -50,6 +55,16 @@ enum MarkdownParser {
             }
 
             if t.isEmpty { flushParagraph(); i += 1; continue }
+            if MarkdownKnowledge.matches("^\\[\\^[^\\]]+\\]:", in: t).first != nil {
+                flushParagraph()
+                var definition = [line]
+                i += 1
+                while i < lines.count, lines[i].hasPrefix("    ") || lines[i].hasPrefix("\t") {
+                    definition.append(lines[i]); i += 1
+                }
+                blocks.append(.paragraph(definition.joined(separator: "\n")))
+                continue
+            }
 
             if let h = headingMatch(t) {
                 flushParagraph(); blocks.append(.heading(level: h.0, text: h.1)); i += 1; continue
@@ -94,6 +109,7 @@ enum MarkdownParser {
                 flushParagraph()
                 var items: [(Bool, String)] = []
                 while i < lines.count, let c = checklistItem(lines[i].trimmingCharacters(in: .whitespaces)) {
+                    onChecklistLine?(i)
                     items.append(c); i += 1
                 }
                 blocks.append(.checklist(items.map { (done: $0.0, text: $0.1) }))
@@ -128,6 +144,21 @@ enum MarkdownParser {
         }
         flushParagraph()
         return blocks
+    }
+
+    /// Use the parser's source positions so examples in code, quotes and tables are untouched.
+    static func togglingCheckbox(at index: Int, in markdown: String) -> String? {
+        var positions: [Int] = []
+        _ = parse(markdown, onChecklistLine: { positions.append($0) })
+        guard positions.indices.contains(index) else { return nil }
+        var lines = markdown.components(separatedBy: "\n")
+        let position = positions[index]
+        let line = lines[position]
+        let indentation = line.prefix { $0 == " " || $0 == "\t" }
+        let content = line.dropFirst(indentation.count)
+        let replacement = content.hasPrefix("- [ ]") ? "- [x]" : "- [ ]"
+        lines[position] = indentation + replacement + content.dropFirst(5)
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Helpers

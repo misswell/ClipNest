@@ -15,8 +15,7 @@ struct ExplorerSidebar: View {
     @State private var showNewFile = false
     @State private var showNewFolder = false
     @State private var newName = ""
-    @State private var renameTarget: URL?
-    @State private var renameText = ""
+    @State private var renameTarget: RenameItemTarget?
     @State private var moveTarget: MoveDocumentTarget?
     @State private var showTrash = false
 
@@ -42,10 +41,9 @@ struct ExplorerSidebar: View {
             Button("Create") { store.createFolder(named: newName) }
             Button("Cancel", role: .cancel) {}
         }
-        .alert("Rename", isPresented: Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })) {
-            TextField("name", text: $renameText)
-            Button("Rename") { if let t = renameTarget { store.rename(t, to: renameText) }; renameTarget = nil }
-            Button("Cancel", role: .cancel) { renameTarget = nil }
+        .sheet(item: $renameTarget) { target in
+            RenameItemView(fileURL: target.url)
+                .environmentObject(store)
         }
         .sheet(item: $moveTarget) { target in
             MoveDocumentView(fileURL: target.url) { moveTarget = nil }
@@ -116,7 +114,7 @@ struct ExplorerSidebar: View {
                         TreeNode(node: child, depth: 1, expanded: $expanded,
                                  onNewFile: { dir in store.selectedFileURL = dir; newName = "Untitled.md"; showNewFile = true },
                                  onNewFolder: { dir in store.selectedFileURL = dir; newName = "New Folder"; showNewFolder = true },
-                                 onRename: { url, name in renameTarget = url; renameText = name },
+                                 onRename: { url, _ in renameTarget = RenameItemTarget(url: url) },
                                  onMove: { url in moveTarget = MoveDocumentTarget(url: url) },
                                  onSelect: { url in store.selectedFileURL = url },
                                  onMoveInOrder: { url, direction in
