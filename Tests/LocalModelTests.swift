@@ -511,7 +511,8 @@ final class ModelIntegrityTests: XCTestCase {
                                           size: 0, sha256: "", files: [])
         XCTAssertThrowsError(try manifest.validate(expectedIdentifier: "qwen3-0.6b-4bit")) { error in
             XCTAssertEqual(error as? LocalModelDownloadError,
-                           .invalidManifest("The manifest lists no files."))
+                           .invalidManifest(String(localized: "The manifest lists no files.",
+                                                   bundle: Bundle(for: VaultStore.self))))
         }
     }
 
