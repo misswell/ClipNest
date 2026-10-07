@@ -136,7 +136,8 @@ final class CaptureCoordinator: ObservableObject {
             // ones the preview offered to keep.
             let url = try await store.saveGeneratedNote(note: note,
                                                         captured: draft.captured,
-                                                        format: NoteFormatConfigurationStore.load())
+                                                        format: NoteFormatConfigurationStore.load(),
+                                                        preferredLanguage: draft.preferredLanguage)
             markProcessed(draft.clipboardHash)
             lastSavedURL = url
             pendingDraft = nil
@@ -283,9 +284,11 @@ final class CaptureCoordinator: ObservableObject {
         // One format per capture: the same configuration reaches the prompt, the preview and
         // the renderer (方案 §37).
         let format = NoteFormatConfigurationStore.load()
+        let configuration = GenerationConfiguration.load()
         do {
-            let generated = try await generateNote(for: snapshot, format: format)
-            try await classifyAndSave(generated, snapshot: snapshot, format: format)
+            let generated = try await generateNote(for: snapshot, format: format, configuration: configuration)
+            try await classifyAndSave(generated, snapshot: snapshot, format: format,
+                                      preferredLanguage: configuration.text.preferredLanguage)
         } catch is CancellationError {
             state = .idle
             statusMessage = ""
@@ -302,11 +305,11 @@ final class CaptureCoordinator: ObservableObject {
     }
 
     private func generateNote(for snapshot: ClipboardSnapshot,
-                              format: NoteFormatConfiguration) async throws -> GeneratedNote {
+                              format: NoteFormatConfiguration,
+                              configuration: GenerationConfiguration) async throws -> GeneratedNote {
         state = .analyzing
         statusMessage = String(localized: "Analyzing content…")
         let categories = store.topLevelCategories()
-        let configuration = GenerationConfiguration.load()
         state = .generating
         statusMessage = generationStatusMessage(for: configuration.mode)
         generationProgress = nil
@@ -402,7 +405,8 @@ final class CaptureCoordinator: ObservableObject {
 
     private func classifyAndSave(_ generated: GeneratedNote,
                                  snapshot: ClipboardSnapshot,
-                                 format: NoteFormatConfiguration) async throws {
+                                 format: NoteFormatConfiguration,
+                                 preferredLanguage: PreferredLanguage) async throws {
         state = .classifying
         statusMessage = String(localized: "Classifying…")
         let finalCategories = store.topLevelCategories()
@@ -419,7 +423,8 @@ final class CaptureCoordinator: ObservableObject {
                 ?? ClipboardProcessingMode.automatic.rawValue
         ) ?? .automatic
         if mode == .confirmBeforeSave {
-            pendingDraft = GeneratedNoteDraft(note: note, snapshot: snapshot, format: format)
+            pendingDraft = GeneratedNoteDraft(note: note, snapshot: snapshot, format: format,
+                                              preferredLanguage: preferredLanguage)
             isRunning = false
             state = .completed
             statusMessage = String(localized: "Note generated — confirm to save")
@@ -434,7 +439,8 @@ final class CaptureCoordinator: ObservableObject {
                                        images: snapshot.images)
         let url = try await store.saveGeneratedNote(note: note,
                                                      captured: captured,
-                                                     format: format)
+                                                     format: format,
+                                                     preferredLanguage: preferredLanguage)
         markProcessed(snapshot.hash)
         lastSavedURL = url
         state = .completed
@@ -567,7 +573,8 @@ final class CaptureCoordinator: ObservableObject {
                         hash: ClipboardContent.hash(for: ocrText.isEmpty ? "photo:\(Date().timeIntervalSince1970)" : ocrText))
                     lastSnapshot = snapshot
                     try await classifyAndSave(generated, snapshot: snapshot,
-                                              format: NoteFormatConfigurationStore.load())
+                                              format: NoteFormatConfigurationStore.load(),
+                                              preferredLanguage: configuration.text.preferredLanguage)
                     return
                 } catch {
                     // Fall through to the OCR + text-model pipeline.

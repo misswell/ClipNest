@@ -161,7 +161,7 @@ struct TimelineDaySection: Identifiable, Sendable {
     }
 
     var title: String {
-        guard let day else { return "Unknown Date" }
+        guard let day else { return String(localized: "Unknown Date") }
         return day.formatted(date: .abbreviated, time: .omitted)
     }
 
@@ -250,7 +250,7 @@ private struct TimelineSidebarRow: View, Equatable {
     }
 
     private var timeLabel: String {
-        guard item.date != .distantPast else { return "Unknown time" }
+        guard item.date != .distantPast else { return String(localized: "Unknown time") }
         return item.date.formatted(date: .omitted, time: .shortened)
     }
 }

@@ -223,8 +223,8 @@ struct VSCodeLayout: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "Open Vault"
-        panel.message = "Choose a folder of Markdown files to open as a vault."
+        panel.prompt = String(localized: "Open Vault")
+        panel.message = String(localized: "Choose a folder of Markdown files to open as a vault.")
         panel.directoryURL = store.openVaultStartingDirectory ?? store.rootURL
         store.openVaultStartingDirectory = nil
         if panel.runModal() == .OK, let url = panel.url {
@@ -266,7 +266,7 @@ struct VSCodeLayout: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text(selection.fileURL.map { "Move “\($0.lastPathComponent)” to the trash?" } ?? "")
+            Text(selection.fileURL.map { String(localized: "Move “\($0.lastPathComponent)” to the trash?") } ?? "")
         }
         // The ⌘N "New Markdown File" command (and the start page chip) both land here.
         // iOS names the file in an alert before creating; keep the same flow.
@@ -473,7 +473,7 @@ struct VSCodeLayout: View {
         }
     }
 
-    private func topToggle(_ icon: String, on: Bool, help: String, action: @escaping () -> Void) -> some View {
+    private func topToggle(_ icon: String, on: Bool, help: LocalizedStringKey, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 14))
@@ -718,7 +718,7 @@ private struct QuickOpenPalette: View {
         // and clearing it here would wipe a query the user typed there.
     }
 
-    private func sectionHeader(_ title: String) -> some View {
+    private func sectionHeader(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(VSCode.muted)
@@ -851,7 +851,7 @@ private struct SearchSidebar: View {
                         .buttonStyle(.plain)
                     }
                     if search.results.isEmpty, !search.query.isEmpty, !search.isIndexing {
-                        Text(search.hasIndex ? "No matches" : "Indexing the vault…")
+                        Text(search.hasIndex ? String(localized: "No matches") : String(localized: "Indexing the vault…"))
                             .font(.system(size: 11))
                             .foregroundStyle(VSCode.muted)
                             .padding(12)

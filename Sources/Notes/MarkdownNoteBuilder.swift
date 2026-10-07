@@ -13,8 +13,17 @@ enum MarkdownNoteBuilder {
                      format: NoteFormatConfiguration = .default,
                      attachments: [SavedAttachment] = [],
                      date: Date = Date(),
-                     sourceKind: CaptureSourceKind = .clipboard) -> String {
+                     sourceKind: CaptureSourceKind = .clipboard,
+                     preferredLanguage: PreferredLanguage = .automatic) -> String {
         var lines: [String] = []
+        // Section labels follow the generated prose, rather than the app's UI language.
+        // Titles and summaries reflect the prose language without code blocks skewing it.
+        let metadataText = [note.title, note.summary].joined(separator: "\n")
+        let generatedText = metadataText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? note.content : metadataText
+        let labels = SectionLabels(text: generatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                   ? originalContent.text : generatedText,
+                                   preferredLanguage: preferredLanguage)
 
         let sourceURL = note.sourceURL ?? originalContent.sourceURL
         if format.includeFrontmatter {
@@ -40,7 +49,7 @@ enum MarkdownNoteBuilder {
         // data: the source slot keeps the image itself, not its transcription. A clipboard
         // capture that merely carries an image still keeps its own text as the source, and
         // with image saving turned off the transcription is all there is to keep.
-        let embedLines = attachments.map { embedLine(for: $0, style: format.imageLinkStyle) }
+        let embedLines = attachments.map { embedLine(for: $0, style: format.imageLinkStyle, alt: labels.image) }
         let originalIsImage = sourceKind != .clipboard && !embedLines.isEmpty
 
         // The body: the model's organized text when the format wants one. When the body slot
@@ -62,14 +71,14 @@ enum MarkdownNoteBuilder {
 
         if !summary.isEmpty {
             if !lines.isEmpty { lines.append("") }
-            lines.append(contentsOf: ["## 摘要", "", summary])
+            lines.append(contentsOf: ["## \(labels.summary)", "", summary])
         }
         if !body.isEmpty {
             if !lines.isEmpty { lines.append("") }
             if summary.isEmpty {
                 lines.append(body)
             } else {
-                lines.append(contentsOf: ["## 正文", "", body])
+                lines.append(contentsOf: ["## \(labels.body)", "", body])
             }
         }
 
@@ -81,7 +90,7 @@ enum MarkdownNoteBuilder {
         if format.includeOriginalImage, !embedsLiveInTheSourceSlot {
             for attachment in attachments {
                 if !lines.isEmpty { lines.append("") }
-                lines.append(embedLine(for: attachment, style: format.imageLinkStyle))
+                lines.append(embedLine(for: attachment, style: format.imageLinkStyle, alt: labels.image))
             }
         }
 
@@ -93,13 +102,13 @@ enum MarkdownNoteBuilder {
             if originalIsImage {
                 if !sourceIsInTheBody {
                     if !lines.isEmpty { lines.append("") }
-                    lines.append(contentsOf: ["## 原始内容", ""])
+                    lines.append(contentsOf: ["## \(labels.original)", ""])
                     lines.append(contentsOf: embedLines)
                 }
             } else if !originalText.isEmpty,
                originalText != body {
                 if !lines.isEmpty { lines.append("") }
-                lines.append(contentsOf: ["## 原始内容", ""])
+                lines.append(contentsOf: ["## \(labels.original)", ""])
                 lines.append(contentsOf: quote(originalContent.text))
             }
         }
@@ -136,20 +145,44 @@ enum MarkdownNoteBuilder {
         if let sourceURL = content.sourceURL {
             lines.append("sourceURL: \(sourceURL.absoluteString)")
         }
-        lines.append(contentsOf: ["---", "", "# Clipboard \(rawTitleDateFormatter.string(from: date))", "", "## 原始内容", "", content.rawText, ""])
+        let labels = SectionLabels(text: content.text)
+        lines.append(contentsOf: ["---", "", "# \(labels.clipboard) \(rawTitleDateFormatter.string(from: date))", "", "## \(labels.original)", "", content.rawText, ""])
         return lines.joined(separator: "\n")
     }
 
     /// The vault-relative link for one attachment (方案 §19). Capture notes always sit one
     /// directory below the vault root, so the plain-Markdown style needs the `../` climb;
     /// Obsidian embeds resolve from the vault root on their own.
-    private static func embedLine(for attachment: SavedAttachment, style: ImageLinkStyle) -> String {
-        let alt = String(localized: "Original image")
+    private static func embedLine(for attachment: SavedAttachment, style: ImageLinkStyle, alt: String) -> String {
         switch style {
         case .markdown:
             return "![\(alt)](../\(attachment.relativePath))"
         case .obsidian:
             return "![[\(attachment.relativePath)]]"
+        }
+    }
+
+    private struct SectionLabels {
+        let summary: String
+        let body: String
+        let original: String
+        let image: String
+        let clipboard: String
+
+        init(text: String, preferredLanguage: PreferredLanguage = .automatic) {
+            let isChinese: Bool
+            switch preferredLanguage {
+            case .simplifiedChinese: isChinese = true
+            case .english: isChinese = false
+            case .automatic:
+                let script = LocalLanguageProfile.analyze(text).script
+                isChinese = script == .chinese || script == .mixed
+            }
+            summary = isChinese ? "摘要" : "Summary"
+            body = isChinese ? "正文" : "Content"
+            original = isChinese ? "原始内容" : "Original Content"
+            image = isChinese ? "原始图片" : "Original image"
+            clipboard = isChinese ? "剪贴板" : "Clipboard"
         }
     }
 

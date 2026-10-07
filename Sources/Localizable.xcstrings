@@ -3890,6 +3890,2245 @@
           }
         }
       }
+    },
+    "## Key points\n\n- Recognize text with Vision\n- Organize it into Markdown\n- Keep the source on device": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## 要点\n\n- 使用 Vision 识别文字\n- 整理为 Markdown 笔记\n- 原始材料保留在设备上"
+          }
+        }
+      }
+    },
+    "AI PROCESSING": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 处理"
+          }
+        }
+      }
+    },
+    "Add": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加"
+          }
+        }
+      }
+    },
+    "Adds the keywords the local model reads out of your question before searching. Needs the enhancement model; search works without it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索前由本地模型提取相关关键词，需要安装增强模型。未安装时仍可正常搜索。"
+          }
+        }
+      }
+    },
+    "Apple Natural Language · fully offline": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple 自然语言框架 · 完全离线"
+          }
+        }
+      }
+    },
+    "Apple Vision · fully offline": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Vision · 完全离线"
+          }
+        }
+      }
+    },
+    "Applies to AI-generated titles, summaries, tags and rewritten text after recognition. Saved immediately for both on-device and online AI. Original text and images stay unchanged; basic offline processing preserves the source language.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置识别后 AI 生成的标题、摘要、标签和改写正文的语言，修改后立即保存，同时适用于设备端和在线 AI。原文和图片保持原样；基础离线处理保留原文语言。"
+          }
+        }
+      }
+    },
+    "Ascending (A → Z)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "升序（A → Z）"
+          }
+        }
+      }
+    },
+    "Available": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可用"
+          }
+        }
+      }
+    },
+    "Base URL": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务地址"
+          }
+        }
+      }
+    },
+    "Basic text processing": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基础文本处理"
+          }
+        }
+      }
+    },
+    "Cannot load image": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法加载图片"
+          }
+        }
+      }
+    },
+    "Capture": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "采集"
+          }
+        }
+      }
+    },
+    "Checking on-device capabilities…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检查设备端能力…"
+          }
+        }
+      }
+    },
+    "Chinese-optimized · 4-bit": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中文优化 · 4 位量化"
+          }
+        }
+      }
+    },
+    "Choose a folder of Markdown files to open as a vault.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择一个包含 Markdown 文件的文件夹作为笔记库。"
+          }
+        }
+      }
+    },
+    "Clean Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "简洁笔记"
+          }
+        }
+      }
+    },
+    "ClipNest Local Lite": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ClipNest 基础本地处理"
+          }
+        }
+      }
+    },
+    "ClipNest Local Lite · fully offline": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ClipNest 基础本地处理 · 完全离线"
+          }
+        }
+      }
+    },
+    "Collapse All": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部折叠"
+          }
+        }
+      }
+    },
+    "Concise rewrite": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "精简改写"
+          }
+        }
+      }
+    },
+    "Content match": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容匹配"
+          }
+        }
+      }
+    },
+    "Content never leaves this device.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容始终保留在此设备上。"
+          }
+        }
+      }
+    },
+    "Could not save the image attachment. Check vault permissions or disk space.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存图片附件，请检查笔记库权限和磁盘空间。"
+          }
+        }
+      }
+    },
+    "Custom": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义"
+          }
+        }
+      }
+    },
+    "Custom Instruction": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义整理要求"
+          }
+        }
+      }
+    },
+    "Delete Model": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除模型"
+          }
+        }
+      }
+    },
+    "Descending (Z → A)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "降序（Z → A）"
+          }
+        }
+      }
+    },
+    "Document actions": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文档操作"
+          }
+        }
+      }
+    },
+    "Download Model": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载模型"
+          }
+        }
+      }
+    },
+    "Downloading from iCloud…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在从 iCloud 下载…"
+          }
+        }
+      }
+    },
+    "EXPLORER": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件"
+          }
+        }
+      }
+    },
+    "Empty": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为空"
+          }
+        }
+      }
+    },
+    "Enhanced AI": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 增强处理"
+          }
+        }
+      }
+    },
+    "Even without the enhancement model, ClipNest still does basic offline organizing and OCR.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未安装增强模型时，ClipNest 仍可离线识别文字并完成基础笔记整理。"
+          }
+        }
+      }
+    },
+    "Exact Search": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "精确搜索"
+          }
+        }
+      }
+    },
+    "Expand queries with the local model": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用本地模型扩展搜索词"
+          }
+        }
+      }
+    },
+    "Finds notes by meaning as well as by wording.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时根据语义和文字查找笔记。"
+          }
+        }
+      }
+    },
+    "Format": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "格式"
+          }
+        }
+      }
+    },
+    "Full Archive": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完整归档"
+          }
+        }
+      }
+    },
+    "Generate a title and preserve the source exactly.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生成标题，并完整保留原始内容。"
+          }
+        }
+      }
+    },
+    "Generating note on device…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在设备上生成笔记…"
+          }
+        }
+      }
+    },
+    "Group into natural sections and pull out the key points and parameters without inventing any.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自然划分章节，提取重点和关键参数，不补充原文不存在的信息。"
+          }
+        }
+      }
+    },
+    "How notes are organized": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记整理方式"
+          }
+        }
+      }
+    },
+    "Images are always read for text recognition — this only decides whether the original picture is also saved into the vault.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片始终会用于文字识别。此选项仅决定是否将原图一并保存到笔记库。"
+          }
+        }
+      }
+    },
+    "Import Image": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入图片"
+          }
+        }
+      }
+    },
+    "Import Image — organize the text in a picture (⌘⇧I)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入图片 — 识别并整理图片中的文字（⌘⇧I）"
+          }
+        }
+      }
+    },
+    "Import Image…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入图片…"
+          }
+        }
+      }
+    },
+    "Indexing…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在建立索引…"
+          }
+        }
+      }
+    },
+    "Keep the model ready": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提前加载模型"
+          }
+        }
+      }
+    },
+    "Keep the organized body, the original text and all source material.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留整理后的正文、原文和全部来源材料。"
+          }
+        }
+      }
+    },
+    "Keep the original text": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保持原文"
+          }
+        }
+      }
+    },
+    "Knowledge note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "知识笔记"
+          }
+        }
+      }
+    },
+    "LOCAL ENHANCEMENT MODEL": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地增强模型"
+          }
+        }
+      }
+    },
+    "LOCAL SEARCH": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地搜索"
+          }
+        }
+      }
+    },
+    "Loads the weights while you browse, so the first capture is not the slow one. Costs about 350 MB of memory while the app is open; they are still released on memory pressure and when the app goes to the background.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浏览时提前加载模型，减少首次采集的等待。应用运行期间约占用 350 MB 内存；内存紧张或应用进入后台时会释放。"
+          }
+        }
+      }
+    },
+    "Matches the words you type, exactly as written.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按输入的文字精确匹配笔记。"
+          }
+        }
+      }
+    },
+    "Model": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        }
+      }
+    },
+    "Model download server": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型下载服务器"
+          }
+        }
+      }
+    },
+    "Move": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移动"
+          }
+        }
+      }
+    },
+    "Move Down": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下移"
+          }
+        }
+      }
+    },
+    "Move Up": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上移"
+          }
+        }
+      }
+    },
+    "NOTE FORMAT": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记格式"
+          }
+        }
+      }
+    },
+    "New File Here": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此新建文件"
+          }
+        }
+      }
+    },
+    "New File…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建文件…"
+          }
+        }
+      }
+    },
+    "New Folder Here": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此新建文件夹"
+          }
+        }
+      }
+    },
+    "New Folder…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建文件夹…"
+          }
+        }
+      }
+    },
+    "New Terminal (⌃⇧`)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建终端（⌃⇧`）"
+          }
+        }
+      }
+    },
+    "No model download server is configured.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未配置模型下载服务器。"
+          }
+        }
+      }
+    },
+    "No recognition languages installed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未安装文字识别语言"
+          }
+        }
+      }
+    },
+    "No system sentence embeddings installed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未安装系统语义搜索资源"
+          }
+        }
+      }
+    },
+    "No terminals. Press + to open one in the vault directory.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无终端。点击 + 在笔记库目录中打开终端。"
+          }
+        }
+      }
+    },
+    "No text recognition languages are installed on this device.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备未安装可用的文字识别语言。"
+          }
+        }
+      }
+    },
+    "Not included in this build": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此版本未包含"
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
+          }
+        }
+      }
+    },
+    "ON-DEVICE CAPABILITIES": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设备端能力"
+          }
+        }
+      }
+    },
+    "ON-DEVICE NOTE GENERATION": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设备端笔记生成"
+          }
+        }
+      }
+    },
+    "ONLINE AI": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在线 AI"
+          }
+        }
+      }
+    },
+    "On-Device": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设备端"
+          }
+        }
+      }
+    },
+    "On-device mode never sends anything to the internet.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设备端模式下，内容不会上传到网络。"
+          }
+        }
+      }
+    },
+    "On-device text recognition with Vision": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 Vision 在设备上识别文字"
+          }
+        }
+      }
+    },
+    "Online": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在线"
+          }
+        }
+      }
+    },
+    "Open Vault": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开笔记库"
+          }
+        }
+      }
+    },
+    "Open in Terminal": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在终端中打开"
+          }
+        }
+      }
+    },
+    "Opens the Search side bar with smart or exact matching": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开搜索侧栏，支持智能搜索和精确搜索"
+          }
+        }
+      }
+    },
+    "Organize into a note worth rereading, with headings, lists and code blocks.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "整理为适合长期阅读的笔记，合理使用标题、列表和代码块。"
+          }
+        }
+      }
+    },
+    "Organizing on device…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在设备上整理…"
+          }
+        }
+      }
+    },
+    "Original image": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原始图片"
+          }
+        }
+      }
+    },
+    "Point this at the CDN that serves model-manifest.json. Runtime downloads never use Hugging Face.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填写提供 model-manifest.json 的下载服务器地址。模型下载不会连接 Hugging Face。"
+          }
+        }
+      }
+    },
+    "Preparing the on-device model…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备设备端模型…"
+          }
+        }
+      }
+    },
+    "Preview Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览笔记"
+          }
+        }
+      }
+    },
+    "Quick Paste — organize the current clipboard (⌘⇧V)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速粘贴 — 整理当前剪贴板（⌘⇧V）"
+          }
+        }
+      }
+    },
+    "Rebuild Index": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重建索引"
+          }
+        }
+      }
+    },
+    "Rebuild the local search index": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重建本地搜索索引"
+          }
+        }
+      }
+    },
+    "Recognize text from images and organize it into notes without uploading the source.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "识别图片中的文字并整理成笔记，无需上传原始材料。"
+          }
+        }
+      }
+    },
+    "Refresh file tree": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新文件列表"
+          }
+        }
+      }
+    },
+    "Refresh the timeline": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新时间线"
+          }
+        }
+      }
+    },
+    "Related by meaning": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语义相关"
+          }
+        }
+      }
+    },
+    "Remove repetition and filler while keeping every fact — no padding.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "去除重复和冗余表达，保留全部事实，不扩写。"
+          }
+        }
+      }
+    },
+    "Rename…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重命名…"
+          }
+        }
+      }
+    },
+    "Requires an Apple silicon Mac": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要搭载 Apple 芯片的 Mac"
+          }
+        }
+      }
+    },
+    "Reveal in Finder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中显示"
+          }
+        }
+      }
+    },
+    "Search files and notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索文件和笔记"
+          }
+        }
+      }
+    },
+    "Search notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索笔记"
+          }
+        }
+      }
+    },
+    "Semantic Search": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语义搜索"
+          }
+        }
+      }
+    },
+    "Show Trash…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看废纸篓…"
+          }
+        }
+      }
+    },
+    "Smart Search": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "智能搜索"
+          }
+        }
+      }
+    },
+    "Sort By Name": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按名称排序"
+          }
+        }
+      }
+    },
+    "Standard Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标准笔记"
+          }
+        }
+      }
+    },
+    "Structured note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "结构化笔记"
+          }
+        }
+      }
+    },
+    "Style only shapes the prose. The JSON output contract, classification and fact preservation are never changed by it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义要求仅影响行文风格，不会改变分类规则，也不会允许编造或遗漏事实。"
+          }
+        }
+      }
+    },
+    "Swipe up to dismiss": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向上轻扫关闭"
+          }
+        }
+      }
+    },
+    "TIMELINE": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "时间线"
+          }
+        }
+      }
+    },
+    "That file could not be opened as an image.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法将此文件作为图片打开。"
+          }
+        }
+      }
+    },
+    "That image could not be read.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取此图片。"
+          }
+        }
+      }
+    },
+    "The AI writes the title, summary, tags and category; the body is your own text. Fastest on device, and a fact can never be lost in a rewrite.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 生成标题、摘要、标签和分类，正文保留原文。设备端处理最快，避免改写时遗漏事实。"
+          }
+        }
+      }
+    },
+    "The download was cancelled.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载已取消。"
+          }
+        }
+      }
+    },
+    "The local model did not return JSON.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地模型未返回 JSON 数据。"
+          }
+        }
+      }
+    },
+    "The local model returned JSON that is not an object.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地模型返回的 JSON 不是对象。"
+          }
+        }
+      }
+    },
+    "The manifest lists no files.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型清单未列出任何文件。"
+          }
+        }
+      }
+    },
+    "The model files are no longer on disk.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "磁盘上的模型文件已不存在。"
+          }
+        }
+      }
+    },
+    "The note has not finished downloading from iCloud. Check your connection and try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记尚未从 iCloud 下载完成，请检查网络连接后重试。"
+          }
+        }
+      }
+    },
+    "The server sent a non-HTTP response.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器返回了无效的 HTTP 响应。"
+          }
+        }
+      }
+    },
+    "The server sent more data than requested.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器返回的数据量超出了请求范围。"
+          }
+        }
+      }
+    },
+    "There is no content to organize.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有可整理的内容。"
+          }
+        }
+      }
+    },
+    "This Mac cannot run the on-device model. Local Lite and Online AI are still available.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 Mac 无法运行设备端模型，仍可使用基础本地处理和在线 AI。"
+          }
+        }
+      }
+    },
+    "This build does not include the on-device runtime.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此版本未包含设备端模型运行组件。"
+          }
+        }
+      }
+    },
+    "This file is not valid UTF-8 text.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此文件不是有效的 UTF-8 文本。"
+          }
+        }
+      }
+    },
+    "This file type can't be shown in the editor. Use Reveal in Finder in the Explorer.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑器暂不支持此文件类型。可在文件列表中选择“在访达中显示”来打开。"
+          }
+        }
+      }
+    },
+    "Title + Original": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标题 + 原文"
+          }
+        }
+      }
+    },
+    "Title and organized content only.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅保留标题和整理后的正文。"
+          }
+        }
+      }
+    },
+    "Title, summary, the source as the body, tags and metadata.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "包含标题、摘要、以原文为正文、标签和元数据。"
+          }
+        }
+      }
+    },
+    "Todo / Checklist": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待办事项 / 清单"
+          }
+        }
+      }
+    },
+    "Unreadable model output": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取模型输出"
+          }
+        }
+      }
+    },
+    "Untitled Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未命名笔记"
+          }
+        }
+      }
+    },
+    "Use the AI service you configured.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用你配置的 AI 服务。"
+          }
+        }
+      }
+    },
+    "Use your own instruction below.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用下方填写的自定义整理要求。"
+          }
+        }
+      }
+    },
+    "VAULT": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记库"
+          }
+        }
+      }
+    },
+    "Vault": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记库"
+          }
+        }
+      }
+    },
+    "View Full Image": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看完整图片"
+          }
+        }
+      }
+    },
+    "Vision recognizes text in images directly on your device.\nYou can organize the recognized text into a Markdown note without uploading the image.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vision 可直接在设备上识别图片中的文字。\n无需上传图片，即可将识别结果整理成 Markdown 笔记。"
+          }
+        }
+      }
+    },
+    "What the note will look like": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记效果预览"
+          }
+        }
+      }
+    },
+    "When enabled, photos are sent directly to the image model (it must support images). When off, photos are only OCR-read on device and the recognized text goes to the text model. In On-Device mode the image model is never called.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启后，照片会直接发送给支持图片输入的图像模型。关闭时，仅在设备上识别文字，再将文字发送给文本模型。设备端模式不会调用在线图像模型。"
+          }
+        }
+      }
+    },
+    "Writing Style": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写作风格"
+          }
+        }
+      }
+    },
+    "Writing the note…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在生成笔记…"
+          }
+        }
+      }
+    },
+    "You have not opened a vault.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未打开笔记库。"
+          }
+        }
+      }
+    },
+    "Your own combination of sections and style.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自行组合笔记内容与写作风格。"
+          }
+        }
+      }
+    },
+    "folder name": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件夹名"
+          }
+        }
+      }
+    },
+    "name.md": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件名.md"
+          }
+        }
+      }
+    },
+    "CONTENT": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容"
+          }
+        }
+      }
+    },
+    "Divider": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分隔线"
+          }
+        }
+      }
+    },
+    "Edit": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑"
+          }
+        }
+      }
+    },
+    "Frontmatter": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文档属性（YAML）"
+          }
+        }
+      }
+    },
+    "Heading 1": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一级标题"
+          }
+        }
+      }
+    },
+    "Heading 2": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "二级标题"
+          }
+        }
+      }
+    },
+    "Heading 3": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "三级标题"
+          }
+        }
+      }
+    },
+    "IN NOTE CONTENT": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记内容匹配"
+          }
+        }
+      }
+    },
+    "Indexing the vault…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在为笔记库建立索引…"
+          }
+        }
+      }
+    },
+    "Inline Code": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "行内代码"
+          }
+        }
+      }
+    },
+    "Keep Original Images": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留原始图片"
+          }
+        }
+      }
+    },
+    "METADATA": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "元数据"
+          }
+        }
+      }
+    },
+    "More Emoji…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多表情…"
+          }
+        }
+      }
+    },
+    "No matches": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有匹配结果"
+          }
+        }
+      }
+    },
+    "Numbered List": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有序列表"
+          }
+        }
+      }
+    },
+    "Organized Body (AI)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 整理正文"
+          }
+        }
+      }
+    },
+    "Original Text": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原始文本"
+          }
+        }
+      }
+    },
+    "PREVIEW": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览"
+          }
+        }
+      }
+    },
+    "Quote": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "引用"
+          }
+        }
+      }
+    },
+    "STYLE": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "风格"
+          }
+        }
+      }
+    },
+    "Source URL": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来源链接"
+          }
+        }
+      }
+    },
+    "Split": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分栏"
+          }
+        }
+      }
+    },
+    "⚠️  Warning": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️  警告"
+          }
+        }
+      }
+    },
+    "✅  Done": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✅  完成"
+          }
+        }
+      }
+    },
+    "💡  Idea": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "💡  想法"
+          }
+        }
+      }
+    },
+    "📝  Note": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📝  笔记"
+          }
+        }
+      }
+    },
+    "🚀  Rocket": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🚀  火箭"
+          }
+        }
+      }
+    },
+    "%lld indexed passages": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已索引 %lld 个文本片段"
+          }
+        }
+      }
+    },
+    "%lld tabs": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个标签页"
+          }
+        }
+      }
+    },
+    "Applies to both the on-device and the online model. The on-device model reads only the first %lld characters.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时适用于设备端和在线模型。设备端模型仅读取前 %lld 个字符。"
+          }
+        }
+      }
+    },
+    "Attachments": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "附件"
+          }
+        }
+      }
+    },
+    "Cannot Preview Image": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法预览图片"
+          }
+        }
+      }
+    },
+    "Cannot read %@.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取 %@。"
+          }
+        }
+      }
+    },
+    "Capture the current clipboard content": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "采集当前剪贴板内容"
+          }
+        }
+      }
+    },
+    "Copy something, and it becomes a Markdown note in “%@”.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制内容，即可整理成 Markdown 笔记并保存到“%@”。"
+          }
+        }
+      }
+    },
+    "Could not download this note from iCloud. %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法从 iCloud 下载此笔记。%@"
+          }
+        }
+      }
+    },
+    "Could not load the on-device model: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法加载设备端模型：%@"
+          }
+        }
+      }
+    },
+    "Could not read this note. %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取此笔记。%@"
+          }
+        }
+      }
+    },
+    "Could not save this note. %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存此笔记。%@"
+          }
+        }
+      }
+    },
+    "Could not write the model to disk: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法将模型写入磁盘：%@"
+          }
+        }
+      }
+    },
+    "Created in %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已创建于 %@"
+          }
+        }
+      }
+    },
+    "Downloading… %lld%%": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载… %lld%%"
+          }
+        }
+      }
+    },
+    "File entry is missing its size or digest: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型文件信息缺少大小或校验值：%@"
+          }
+        }
+      }
+    },
+    "Folders": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件夹"
+          }
+        }
+      }
+    },
+    "Image preview: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片预览：%@"
+          }
+        }
+      }
+    },
+    "Inbox": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收件箱"
+          }
+        }
+      }
+    },
+    "Installed · v%lld · %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已安装 · v%lld · %@"
+          }
+        }
+      }
+    },
+    "Last pass: %lld notes · %lld unchanged · %lld removed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次索引：%lld 篇笔记 · %lld 篇未变更 · %lld 篇已移除"
+          }
+        }
+      }
+    },
+    "Loading Vault…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在加载笔记库…"
+          }
+        }
+      }
+    },
+    "Loading image…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在加载图片…"
+          }
+        }
+      }
+    },
+    "Matches “%@”": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匹配“%@”"
+          }
+        }
+      }
+    },
+    "Missing image: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找不到图片：%@"
+          }
+        }
+      }
+    },
+    "Move “%@” to the trash?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将“%@”移到废纸篓？"
+          }
+        }
+      }
+    },
+    "On-device AI could not finish: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设备端 AI 未能完成处理：%@"
+          }
+        }
+      }
+    },
+    "On-device AI is unavailable: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设备端 AI 不可用：%@"
+          }
+        }
+      }
+    },
+    "Open a folder of Markdown files to get started.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开包含 Markdown 文件的文件夹，开始使用。"
+          }
+        }
+      }
+    },
+    "Original Image": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原始图片"
+          }
+        }
+      }
+    },
+    "Preparing Timeline…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备时间线…"
+          }
+        }
+      }
+    },
+    "Search all notes for “%@”": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在全部笔记中搜索“%@”"
+          }
+        }
+      }
+    },
+    "Text recognition failed: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字识别失败：%@"
+          }
+        }
+      }
+    },
+    "The download server returned HTTP %lld.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载服务器返回 HTTP %lld。"
+          }
+        }
+      }
+    },
+    "The download stopped early (%lld of %lld bytes).": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载提前中断（已接收 %lld 字节，共 %lld 字节）。"
+          }
+        }
+      }
+    },
+    "The downloaded file failed verification: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载文件校验失败：%@"
+          }
+        }
+      }
+    },
+    "The local search index could not be opened: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法打开本地搜索索引：%@"
+          }
+        }
+      }
+    },
+    "The model manifest is invalid: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型清单无效：%@"
+          }
+        }
+      }
+    },
+    "The server offered “%@” but “%@” was expected.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器提供的是“%@”，需要的是“%@”。"
+          }
+        }
+      }
+    },
+    "Unlinked Mentions": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未链接的提及"
+          }
+        }
+      }
+    },
+    "Unsafe file name in manifest: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型清单中存在不安全的文件名：%@"
+          }
+        }
+      }
+    },
+    "Unsupported or invalid base expression: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不支持或无效的数据表表达式：%@"
+          }
+        }
+      }
+    },
+    ", ": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "、"
+          }
+        }
+      }
+    },
+    "Record audio attachments for your notes.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录制音频并作为附件保存到你的笔记中。"
+          }
+        }
+      }
+    },
+    " ": {
+      "shouldTranslate": false
+    },
+    "%@ · %@": {
+      "shouldTranslate": false
+    },
+    "%lld": {
+      "shouldTranslate": false
+    },
+    "%lld / %lld": {
+      "shouldTranslate": false
+    },
+    "%lld.": {
+      "shouldTranslate": false
+    },
+    "%lld/%lld": {
+      "shouldTranslate": false
+    },
+    "ClipNest": {
+      "shouldTranslate": false
+    },
+    "GitHub": {
+      "shouldTranslate": false
+    },
+    "Markdown": {
+      "shouldTranslate": false
+    },
+    "Obsidian": {
+      "shouldTranslate": false
+    },
+    "https://…/qwen3-0.6b-4bit/": {
+      "shouldTranslate": false
+    },
+    "•": {
+      "shouldTranslate": false
+    },
+    "": {
+      "shouldTranslate": false
     }
   },
   "version": "1.0"

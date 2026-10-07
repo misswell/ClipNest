@@ -38,7 +38,7 @@ struct DocumentTimelineView: View {
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     AppToolbarIconButton(systemImage: "arrow.clockwise",
-                                         label: "Refresh Timeline") {
+                                         label: String(localized: "Refresh Timeline")) {
                         store.refresh()
                     }
                 }
@@ -171,7 +171,7 @@ private struct TimelineSection: Identifiable, Sendable {
     }
 
     var title: String {
-        guard let day else { return "Unknown Date" }
+        guard let day else { return String(localized: "Unknown Date") }
         return day.formatted(date: .complete, time: .omitted)
     }
 }
@@ -264,7 +264,7 @@ private struct TimelineDocumentRow: View, Equatable {
     }
 
     private var timeLabel: String {
-        guard item.date != .distantPast else { return "Unknown time" }
+        guard item.date != .distantPast else { return String(localized: "Unknown time") }
         return item.date.formatted(date: .omitted, time: .shortened)
     }
 }

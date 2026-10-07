@@ -140,7 +140,8 @@ extension VaultStore {
     func saveGeneratedNote(note: GeneratedNote,
                            captured: CapturedContent,
                            format: NoteFormatConfiguration,
-                           date: Date = Date()) async throws -> URL {
+                           date: Date = Date(),
+                           preferredLanguage: PreferredLanguage = .automatic) async throws -> URL {
         guard let rootURL else { throw ClipNestVaultError.noVault }
         let categoryName = FileNameSanitizer.directoryName(from: note.category,
                                                            fallback: ClassificationService.inbox)
@@ -175,7 +176,8 @@ extension VaultStore {
                                                 format: format,
                                                 attachments: savedAttachments,
                                                 date: date,
-                                                sourceKind: captured.sourceKind)
+                                                sourceKind: captured.sourceKind,
+                                                preferredLanguage: preferredLanguage)
         do {
             try await writeClipNest(markdown, to: url)
         } catch {

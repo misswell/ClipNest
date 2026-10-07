@@ -315,7 +315,7 @@ struct LocalSearchEngine {
         if matchedTerms.isEmpty {
             return String(localized: "Content match")
         }
-        let listed = matchedTerms.prefix(3).joined(separator: String(localized: "、"))
+        let listed = matchedTerms.prefix(3).joined(separator: String(localized: ", "))
         return String(localized: "Matches “\(listed)”")
     }
 

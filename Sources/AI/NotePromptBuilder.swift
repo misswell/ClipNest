@@ -12,7 +12,7 @@ enum NotePromptBuilder {
         let categories = existingCategories.isEmpty
             ? "（当前没有已有分类，只能使用 Inbox）"
             : existingCategories.map { "- \($0)" }.joined(separator: "\n")
-        let language = languageInstruction(for: preferredLanguage)
+        let language = preferredLanguage.generationInstruction
         let requirements = format.generationRequirements
 
         var schemaFields: [String] = []
@@ -100,14 +100,4 @@ enum NotePromptBuilder {
         """
     }
 
-    private static func languageInstruction(for language: PreferredLanguage) -> String {
-        switch language {
-        case .automatic:
-            return "使用与原始内容相同的主要语言；如果内容混合语言，优先使用中文并保留必要的英文技术术语。"
-        case .simplifiedChinese:
-            return "使用简体中文输出标题、摘要和说明；代码、专有名词和必要引用保持原样。"
-        case .english:
-            return "Use English for the title, summary, and explanations; keep code, proper nouns, and necessary quotations intact."
-        }
-    }
 }

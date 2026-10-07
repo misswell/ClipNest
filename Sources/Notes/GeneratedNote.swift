@@ -30,10 +30,12 @@ struct GeneratedNoteDraft: Identifiable, Equatable {
     let clipboardHash: String
     let format: NoteFormatConfiguration
     let images: [CapturedImage]
+    let preferredLanguage: PreferredLanguage
 
     init(note: GeneratedNote,
          snapshot: ClipboardSnapshot,
-         format: NoteFormatConfiguration = .default) {
+         format: NoteFormatConfiguration = .default,
+         preferredLanguage: PreferredLanguage = .automatic) {
         id = UUID()
         title = note.title
         summary = note.summary
@@ -47,6 +49,7 @@ struct GeneratedNoteDraft: Identifiable, Equatable {
         clipboardHash = snapshot.hash
         self.format = format
         images = snapshot.images
+        self.preferredLanguage = preferredLanguage
     }
 
     /// The captured material this draft saves, unchanged from the capture itself.

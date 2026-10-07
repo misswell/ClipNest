@@ -72,7 +72,7 @@ struct HomeWelcomeView: View {
         }
     }
 
-    private func actionChip(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private func actionChip(_ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 7) {
                 Image(systemName: systemImage)
@@ -112,7 +112,7 @@ struct HomeWelcomeView: View {
         }
     }
 
-    private func homeCard<Content: View>(title: String,
+    private func homeCard<Content: View>(title: LocalizedStringKey,
                                          systemImage: String,
                                          @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {

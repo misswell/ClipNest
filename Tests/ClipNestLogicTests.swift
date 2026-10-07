@@ -321,7 +321,7 @@ final class ClipNestLogicTests: XCTestCase {
         XCTAssertEqual(existingText, "Existing note")
         let generatedText = try String(contentsOf: first, encoding: .utf8)
         XCTAssertTrue(generatedText.contains("# Same Title"))
-        XCTAssertTrue(generatedText.contains("## 摘要"))
+        XCTAssertTrue(generatedText.contains("## Summary"))
         XCTAssertTrue(generatedText.contains("Summary"))
         XCTAssertTrue(generatedText.contains("Original clipboard text"),
                       "the source plays the body under the default format")

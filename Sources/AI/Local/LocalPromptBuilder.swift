@@ -93,7 +93,7 @@ struct LocalPromptBuilder: Equatable {
         // own line next to the source is what made the model copy it into the title and tags.
         rules.append(Self.categoryRule(number: number, existingCategories: existingCategories))
         number += 1
-        rules.append("\(number). 禁止编造原文没有的信息。\(Self.languageDirective(preferredLanguage))")
+        rules.append("\(number). 禁止编造原文没有的信息。\(preferredLanguage.generationInstruction)")
         number += 1
 
         // Fields the format does not want are ruled out *by name*: naming what must not be
@@ -145,18 +145,6 @@ struct LocalPromptBuilder: Equatable {
         if !requirements.summary { excluded.append("summary") }
         if !requirements.tags { excluded.append("tags") }
         return excluded
-    }
-
-    /// A single, unambiguous instruction about the output language.
-    private static func languageDirective(_ language: PreferredLanguage) -> String {
-        switch language {
-        case .simplifiedChinese:
-            return "请用简体中文输出。"
-        case .english:
-            return "Write the output in English."
-        case .automatic:
-            return "使用与原文相同的语言。"
-        }
     }
 
     /// The category list is a closed set: the model may choose from it, or return an empty

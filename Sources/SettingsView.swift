@@ -25,7 +25,7 @@ struct SettingsView: View {
 
     @State private var aiBaseURL: String
     @State private var aiModel: String
-    @State private var preferredLanguage: String
+    @AppStorage(ClipNestSettings.aiPreferredLanguage) private var preferredLanguage = PreferredLanguage.automatic
     @State private var apiKey: String
     @State private var aiSettingsSaved = false
     @State private var imageUsesSeparateEndpoint: Bool
@@ -57,7 +57,6 @@ struct SettingsView: View {
         let configuration = AIConfigurationStore.load()
         _aiBaseURL = State(initialValue: configuration.baseURL)
         _aiModel = State(initialValue: configuration.model)
-        _preferredLanguage = State(initialValue: configuration.preferredLanguage.rawValue)
         _apiKey = State(initialValue: configuration.apiKey)
         let imageConfiguration = AIConfigurationStore.loadImageConfiguration()
         _imageUsesSeparateEndpoint = State(initialValue: imageConfiguration.usesSeparateEndpoint)
@@ -217,6 +216,18 @@ struct SettingsView: View {
 
                 // One note format for every path — local model, Local Lite and online (方案 §3).
                 sectionCard("NOTE FORMAT") {
+                    Picker("Output Language", selection: $preferredLanguage) {
+                        ForEach(PreferredLanguage.allCases) { language in
+                            Text(language.title).tag(language)
+                        }
+                    }
+                    .padding(.vertical, AppMetrics.rowVertical)
+                    Text("Applies to AI-generated titles, summaries, tags and rewritten text after recognition. Saved immediately for both on-device and online AI. Original text and images stay unchanged; basic offline processing preserves the source language.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, AppMetrics.rowVertical)
+                    rowDivider
                     NoteFormatSettingsSection()
                 }
 
@@ -247,7 +258,6 @@ struct SettingsView: View {
                 }
                 .onChange(of: aiBaseURL) { _, _ in aiSettingsSaved = false }
                 .onChange(of: aiModel) { _, _ in aiSettingsSaved = false }
-                .onChange(of: preferredLanguage) { _, _ in aiSettingsSaved = false }
                 .onChange(of: apiKey) { _, _ in aiSettingsSaved = false }
                 .onChange(of: imageUsesSeparateEndpoint) { _, _ in aiSettingsSaved = false }
                 .onChange(of: imageBaseURL) { _, _ in aiSettingsSaved = false }
@@ -651,13 +661,6 @@ struct SettingsView: View {
             #endif
             .padding(.vertical, AppMetrics.rowVertical)
         rowDivider
-        Picker("Output Language", selection: $preferredLanguage) {
-            ForEach(PreferredLanguage.allCases) { language in
-                Text(language.title).tag(language.rawValue)
-            }
-        }
-        .padding(.vertical, AppMetrics.rowVertical)
-        rowDivider
         Toggle(isOn: $imageUsesSeparateEndpoint) {
             Label("Use a separate model for photos", systemImage: "photo.tv")
         }
@@ -749,7 +752,7 @@ struct SettingsView: View {
                 baseURL: aiBaseURL,
                 apiKey: apiKey,
                 model: aiModel,
-                preferredLanguage: PreferredLanguage(rawValue: preferredLanguage) ?? .automatic
+                preferredLanguage: preferredLanguage
             )
         )
         AIConfigurationStore.saveImageConfiguration(

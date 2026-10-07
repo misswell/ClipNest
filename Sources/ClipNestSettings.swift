@@ -94,6 +94,18 @@ enum PreferredLanguage: String, CaseIterable, Identifiable {
         case .english: return "English"
         }
     }
+
+    /// Shared by the local and online prompts, independent of the interface language.
+    var generationInstruction: String {
+        switch self {
+        case .automatic:
+            return "使用与原始内容相同的主要语言；混合语言内容按主要语言输出，保留必要的技术术语。"
+        case .simplifiedChinese:
+            return "使用简体中文输出标题、摘要、标签和整理后的正文；代码、专有名词和必要引用保持原样，已有分类名称必须保持原样。"
+        case .english:
+            return "Write the title, summary, tags and rewritten body in English; keep code, proper nouns, necessary quotations and existing category names intact."
+        }
+    }
 }
 
 /// How the vault search field interprets a query (spec §44). Technical vocabulary

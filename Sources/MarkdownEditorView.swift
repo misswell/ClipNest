@@ -10,6 +10,14 @@ enum EditorMode: String, CaseIterable, Identifiable {
     static let persistenceKey = "editor.lastMode"
 
     var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .edit: return String(localized: "Edit")
+        case .split: return String(localized: "Split")
+        case .preview: return String(localized: "Preview")
+        }
+    }
+
     var systemImage: String {
         switch self {
         // `pencil` rather than `square.and.pencil`: the pencil-in-a-square carries its ink down
@@ -427,7 +435,7 @@ struct MarkdownEditorView: View {
                     AppToolbarIconButton(
                         systemImage: candidate.systemImage,
                         isSelected: mode == candidate,
-                        label: candidate.rawValue
+                        label: candidate.title
                     ) {
                         mode = candidate
                     }
@@ -477,7 +485,7 @@ struct MarkdownEditorView: View {
     /// pencil means tapping takes you to editing.
     private var modeToggleButton: some View {
         let target = EditorMode.toggleTarget(from: effectiveMode)
-        return AppToolbarIconButton(systemImage: target.systemImage, label: target.rawValue) {
+        return AppToolbarIconButton(systemImage: target.systemImage, label: target.title) {
             mode = target
         }
     }

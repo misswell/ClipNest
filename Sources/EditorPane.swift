@@ -256,7 +256,7 @@ struct ModeToggle: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(m.rawValue)
+                .help(m.title)
             }
         }
         .background(VSCode.hoverBg, in: RoundedRectangle(cornerRadius: 6))

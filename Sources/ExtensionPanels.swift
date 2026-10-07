@@ -160,7 +160,7 @@ private struct ExtensionRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func smallButton(_ title: String, prominent: Bool = false, action: @escaping () -> Void) -> some View {
+    private func smallButton(_ title: LocalizedStringKey, prominent: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title).font(.system(size: 11, weight: .medium))
                 .foregroundStyle(prominent ? .white : VSCode.fg)

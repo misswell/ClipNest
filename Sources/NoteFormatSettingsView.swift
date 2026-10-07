@@ -193,18 +193,19 @@ struct NoteFormatSettingsSection: View {
 
     /// Fixed sample material. The preview never calls any model — it renders the structure
     /// template with placeholders so the user sees exactly what their configuration builds.
-    private static let sampleContent = ClipboardContent(text: """
-    iOS Vision 可以在设备端进行 OCR，无需联网。
-    实测在 iPhone 15 Pro 上，一张 A4 文档大约 0.4 秒完成识别。
-    """)!
+    private static var sampleContent: ClipboardContent {
+        ClipboardContent(text: String(localized: "Vision recognizes text in images directly on your device.\nYou can organize the recognized text into a Markdown note without uploading the image."))!
+    }
 
-    private static let sampleNote = GeneratedNote(
-        title: "iOS Vision 本地 OCR",
-        summary: "用 Vision 在设备端识别图片文字，约 0.4 秒完成。",
-        content: "## 要点\n\n- VNRecognizeTextRequest 做本地 OCR\n- iPhone 15 Pro 实测约 0.4 秒\n- 全程不联网",
-        category: "Inbox",
-        tags: ["iOS", "OCR"],
-        sourceURL: URL(string: "https://example.com/vision-ocr"))
+    private static var sampleNote: GeneratedNote {
+        GeneratedNote(
+            title: String(localized: "On-device text recognition with Vision"),
+            summary: String(localized: "Recognize text from images and organize it into notes without uploading the source."),
+            content: String(localized: "## Key points\n\n- Recognize text with Vision\n- Organize it into Markdown\n- Keep the source on device"),
+            category: "Inbox",
+            tags: ["iOS", "OCR"],
+            sourceURL: URL(string: "https://example.com/vision-ocr"))
+    }
 
     private static let sampleAttachments = [
         SavedAttachment(url: URL(fileURLWithPath: "/preview/sample.jpg"),
