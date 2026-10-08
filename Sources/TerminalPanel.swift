@@ -78,7 +78,7 @@ struct TerminalPanel: View {
             Image(systemName: "terminal")
                 .font(.system(size: 11))
                 .foregroundStyle(isActive ? VSCode.activeIcon : VSCode.muted)
-            Text(session.title + (session.hasExited ? " (exited)" : ""))
+            Text(session.hasExited ? String(localized: "\(session.title) (exited)") : session.title)
                 .font(.system(size: 12))
                 .foregroundStyle(isActive ? VSCode.fg : VSCode.muted)
                 .lineLimit(1)
@@ -117,7 +117,7 @@ struct TerminalPanel: View {
         .padding(.trailing, 8)
     }
 
-    private func toolButton(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
+    private func toolButton(_ icon: String, help: LocalizedStringKey, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 12))

@@ -375,6 +375,9 @@ struct SettingsView: View {
                         .foregroundStyle(Theme.mutedInk)
                         .padding(.bottom, AppMetrics.rowVertical)
                 }
+                #if os(macOS)
+                sectionCard("SOFTWARE UPDATE") { SoftwareUpdateSettings() }
+                #endif
             }
             .padding(.horizontal, AppMetrics.screenHorizontal)
             .padding(.top, AppMetrics.screenTop)

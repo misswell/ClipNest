@@ -265,6 +265,37 @@ actor VaultFileAccess {
 
     // MARK: - iCloud
 
+    /// Legacy iCloud Drive placeholders are named `.photo.jpg.icloud`. Keep using the
+    /// logical `photo.jpg` URL for resource queries, downloading and coordinated reads.
+    nonisolated static func logicalURL(for url: URL) -> URL {
+        let name = url.lastPathComponent
+        guard name.hasPrefix("."), name.hasSuffix(".icloud"), name.count > 8 else { return url }
+        return url.deletingLastPathComponent().appendingPathComponent(String(name.dropFirst().dropLast(7)))
+    }
+
+    nonisolated private static func placeholderURL(for url: URL) -> URL {
+        url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).icloud")
+    }
+
+    /// Resolution must not require downloaded bytes: otherwise a phone-created attachment
+    /// is rejected before `readData` can request its iCloud download on the Mac.
+    nonisolated static func isAvailableForReading(at url: URL) -> Bool {
+        let logical = logicalURL(for: url).standardizedFileURL
+        let manager = FileManager.default
+        return manager.fileExists(atPath: logical.path)
+            || manager.fileExists(atPath: placeholderURL(for: logical).path)
+            || manager.isUbiquitousItem(at: logical)
+    }
+
+    private func cloudResourceValues(at url: URL) -> URLResourceValues? {
+        // Construct fresh URLs on every poll; URL resource values can cache the previous
+        // download status while the item is being materialised.
+        let logical = URL(fileURLWithPath: Self.logicalURL(for: url).path)
+        let values = try? logical.resourceValues(forKeys: Self.iCloudKeys)
+        if values?.isUbiquitousItem == true { return values }
+        return (try? Self.placeholderURL(for: logical).resourceValues(forKeys: Self.iCloudKeys)) ?? values
+    }
+
     /// AVPlayer reads a private local copy, while the original iCloud/scoped file is read
     /// only inside a coordinated accessor. The caller owns and removes this temporary file.
     func mediaPreviewCopy(at url: URL) async throws -> URL {
@@ -317,7 +348,7 @@ actor VaultFileAccess {
     }
 
     private func downloadStatus(of url: URL) -> URLUbiquitousItemDownloadingStatus? {
-        let values = try? url.resourceValues(forKeys: Self.iCloudKeys)
+        let values = cloudResourceValues(at: url)
         guard values?.isUbiquitousItem == true else { return nil }
         return values?.ubiquitousItemDownloadingStatus
     }
@@ -332,7 +363,7 @@ actor VaultFileAccess {
     /// Waits (cancellably) until the note has a usable local copy.
     private func materializeIfNeeded(_ url: URL,
                                      phase: (@Sendable (VaultAccessPhase) -> Void)?) async throws {
-        let values = try? url.resourceValues(forKeys: Self.iCloudKeys)
+        let values = cloudResourceValues(at: url)
         guard values?.isUbiquitousItem == true else { return }
 
         let status = values?.ubiquitousItemDownloadingStatus
@@ -350,7 +381,7 @@ actor VaultFileAccess {
         let deadline = Date().addingTimeInterval(Self.downloadTimeout)
         while Date() < deadline {
             try Task.checkCancellation()
-            let current = try? url.resourceValues(forKeys: Self.iCloudKeys)
+            let current = cloudResourceValues(at: url)
             if current?.ubiquitousItemDownloadingStatus == .current { return }
             if current?.ubiquitousItemDownloadingStatus == .downloaded {
                 // Usable now; the newer revision can arrive later.

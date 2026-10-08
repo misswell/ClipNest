@@ -22,6 +22,9 @@ struct MarkdownVaultApp: App {
                 .environmentObject(captureCoordinator)
                 .environmentObject(search)
                 .tint(Theme.accent)
+                #if os(macOS)
+                .modifier(SoftwareUpdatePresentation())
+                #endif
                 .task {
                     // The local model is loaded on demand and released under memory pressure
                     // or when the app goes to the background (China plan §26).
@@ -32,6 +35,7 @@ struct MarkdownVaultApp: App {
         .defaultSize(width: 1200, height: 760)
         .windowStyle(.hiddenTitleBar)
         .commands {
+            SoftwareUpdateCommands()
             CommandGroup(after: .newItem) {
                 Button("New Markdown File") { store.requestNewFile() }
                     .keyboardShortcut("n", modifiers: [.command])

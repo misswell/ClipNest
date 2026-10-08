@@ -32,7 +32,7 @@ struct ActivityBar: View {
     var onSettings: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: AppMetrics.DesktopNavigation.spacing) {
             ForEach(ActivityItem.allCases) { item in
                 itemButton(item)
             }
@@ -40,8 +40,8 @@ struct ActivityBar: View {
             AccountButton()
             bottomButton("gearshape", help: String(localized: "Settings"), action: onSettings)
         }
-        .padding(.vertical, 6)
-        .frame(width: 48)
+        .padding(.vertical, AppMetrics.DesktopNavigation.verticalInset)
+        .frame(width: AppMetrics.DesktopNavigation.railWidth)
         .frame(maxHeight: .infinity)
         .background(VSCode.activityBg)
         .overlay(alignment: .trailing) {
@@ -59,31 +59,49 @@ struct ActivityBar: View {
                 sidebarVisible = true
             }
         } label: {
-            Image(systemName: item.icon)
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(isActive ? VSCode.activeIcon : VSCode.muted)
-                .frame(width: 48, height: 48)
-                .overlay(alignment: .leading) {
-                    Rectangle()
-                        .fill(isActive ? VSCode.activeIcon : Color.clear)
-                        .frame(width: 2)
-                }
-                .contentShape(Rectangle())
+            ActivityBarIcon(icon: item.icon, isActive: isActive)
         }
         .buttonStyle(.plain)
         .help(item.help)
+        .accessibilityLabel(item.help)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 
     private func bottomButton(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(VSCode.muted)
-                .frame(width: 48, height: 44)
-                .contentShape(Rectangle())
+            ActivityBarIcon(icon: icon)
         }
         .buttonStyle(.plain)
         .help(help)
+        .accessibilityLabel(help)
+    }
+}
+
+/// One label for navigation, account and settings controls, including pointer feedback.
+private struct ActivityBarIcon: View {
+    let icon: String
+    var isActive = false
+    @State private var isHovered = false
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.system(size: AppMetrics.DesktopNavigation.iconSize, weight: .regular))
+            .foregroundStyle(isActive || isHovered ? VSCode.activeIcon : VSCode.muted)
+            .frame(width: AppMetrics.DesktopNavigation.buttonSize,
+                   height: AppMetrics.DesktopNavigation.buttonSize)
+            .background(isActive ? VSCode.fieldBg : (isHovered ? VSCode.hoverBg : Color.clear),
+                        in: RoundedRectangle(cornerRadius: AppMetrics.DesktopNavigation.cornerRadius))
+            .frame(width: AppMetrics.DesktopNavigation.railWidth)
+            .overlay(alignment: .leading) {
+                if isActive {
+                    Capsule()
+                        .fill(VSCode.activeIcon)
+                        .frame(width: AppMetrics.DesktopNavigation.indicatorWidth,
+                               height: AppMetrics.DesktopNavigation.indicatorHeight)
+                }
+            }
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
     }
 }
 
@@ -107,16 +125,14 @@ private struct AccountButton: View {
             }
             Button("iCloud Settings…") { openICloudSettings() }
         } label: {
-            Image(systemName: "person.crop.circle")
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(VSCode.muted)
-                .frame(width: 48, height: 44)
-                .contentShape(Rectangle())
+            ActivityBarIcon(icon: "person.crop.circle")
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help(signedIn ? String(localized: "Accounts — iCloud Signed In") : String(localized: "Accounts"))
+        .accessibilityLabel(String(localized: "Accounts"))
     }
 
     private func openAppleIDSettings() {

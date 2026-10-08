@@ -130,6 +130,8 @@ final class VaultStore: ObservableObject {
     /// Save requests are serialized off the main actor. A revision prevents an older
     /// debounced request from overwriting a newer edit when disk writes finish out of order.
     private static var saveRevision: UInt64 = 0
+    private var pendingEditorSaves = 0
+    private var editorSaveErrors: [URL: Error] = [:]
     /// Tracks the app's own writes so the FSEvents watcher can ignore the autosave that
     /// triggered them instead of rebuilding the whole vault.
     private var writeEventFilter = VaultWriteEventFilter()
@@ -545,6 +547,7 @@ final class VaultStore: ObservableObject {
     }
 
     func save(_ text: String, to url: URL) {
+        pendingEditorSaves += 1
         Self.saveRevision &+= 1
         let revision = Self.saveRevision
         let expectedRoot = rootURL
@@ -553,7 +556,11 @@ final class VaultStore: ObservableObject {
         noteInternalWrite(to: url)
         VaultFileAccess.enqueueExistingText(text, to: url, revision: revision, historyRoot: expectedRoot) { [weak self] result in
             Task { @MainActor [weak self] in
-                guard let self, self.rootURL == expectedRoot else { return }
+                guard let self else { return }
+                self.pendingEditorSaves -= 1
+                if case .failure(let error) = result { self.editorSaveErrors[url] = error }
+                else { self.editorSaveErrors.removeValue(forKey: url) }
+                guard self.rootURL == expectedRoot else { return }
                 switch result {
                 case .success(let written):
                     guard let written else { return }
@@ -565,6 +572,16 @@ final class VaultStore: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Called after every visible editor has flushed its debounce, before updater exit.
+    func waitForEditorSaves() async throws {
+        let deadline = Date().addingTimeInterval(30)
+        while pendingEditorSaves > 0 {
+            guard Date() < deadline else { throw CocoaError(.fileWriteUnknown) }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        if let error = editorSaveErrors.values.first { throw error }
     }
 
     func notifyFileChanges(_ urls: [URL]) {
@@ -1017,13 +1034,18 @@ final class VaultStore: ObservableObject {
             fileURL?.deletingLastPathComponent().appendingPathComponent(name),
             rootURL?.appendingPathComponent(name)
         ].compactMap { $0 }
-        for c in direct where FileManager.default.fileExists(atPath: c.path) { return c }
+        for c in direct where VaultFileAccess.isAvailableForReading(at: c) {
+            return VaultFileAccess.logicalURL(for: c).standardizedFileURL
+        }
 
         // Fall back to searching the whole vault by file name (Obsidian shortest-path behaviour).
         if let root = rootURL {
             let base = (name as NSString).lastPathComponent
             if let en = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) {
-                for case let u as URL in en where u.lastPathComponent == base { return u }
+                for case let u as URL in en {
+                    let logical = VaultFileAccess.logicalURL(for: u)
+                    if logical.lastPathComponent == base { return logical }
+                }
             }
         }
         return nil

@@ -100,7 +100,7 @@ struct TimelineSidebar: View {
         }
     }
 
-    private func sidebarHint(_ text: String) -> some View {
+    private func sidebarHint(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.system(size: 11))
             .foregroundStyle(VSCode.muted)

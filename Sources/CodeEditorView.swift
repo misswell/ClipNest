@@ -6,11 +6,13 @@ import AppKit
 /// "/" slash-command menu for inserting Markdown snippets and emoji at the caret.
 struct CodeEditorView: NSViewRepresentable {
     @Binding var text: String
+    @Environment(\.isEnabled) private var isEnabled
     let documentID: URL
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
+        context.coordinator.isEnabled = isEnabled
         let scroll = NSTextView.scrollableTextView()
         scroll.borderType = .noBorder
         scroll.hasVerticalScroller = true
@@ -44,6 +46,8 @@ struct CodeEditorView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let tv = nsView.documentView as? NSTextView else { return }
+        context.coordinator.isEnabled = isEnabled
+        tv.isEditable = isEnabled && !context.coordinator.isHydrating
         if context.coordinator.documentID != documentID
             || (context.coordinator.isHydrating && context.coordinator.hydratingValue != text) {
             context.coordinator.startHydration(text, in: tv, documentID: documentID)
@@ -73,6 +77,7 @@ struct CodeEditorView: NSViewRepresentable {
         private(set) var hydratingValue = ""
         private var hydrationGeneration: UInt64 = 0
         private(set) var isHydrating = false
+        var isEnabled = true
         /// The caret line the text storage is currently styled for. Moving the caret *within*
         /// a line cannot change Live Preview styling, so it is skipped entirely.
         private var highlightedActiveLine: NSRange?
@@ -155,7 +160,7 @@ struct CodeEditorView: NSViewRepresentable {
         private func finishHydration(in textView: NSTextView, generation: UInt64, documentID: URL) {
             guard isCurrent(generation, documentID) else { return }
             isHydrating = false
-            textView.isEditable = true
+            textView.isEditable = isEnabled
             noteActiveLine(textView)
             scheduleHighlight(after: 0.16)
         }

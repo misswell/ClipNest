@@ -234,7 +234,7 @@ struct WikiPanel: View {
         .onAppear { initialized = store.rootURL.map { WikiService.isInitialized($0) } ?? false }
     }
 
-    private func header(icon: String, title: String) -> some View {
+    private func header(icon: String, title: LocalizedStringKey) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon).font(.system(size: 26)).foregroundStyle(VSCode.accent)
             Text(title).font(.system(size: 18, weight: .bold))

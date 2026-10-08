@@ -6129,6 +6129,406 @@
     },
     "": {
       "shouldTranslate": false
+    },
+    "%@ (exited)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@（已退出）"
+          }
+        }
+      }
+    },
+    "Close Panel": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭面板"
+          }
+        }
+      }
+    },
+    "Kill Active Terminal": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭当前终端"
+          }
+        }
+      }
+    },
+    "No Markdown notes yet. New notes appear here in chronological order.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有 Markdown 笔记。新笔记会按时间顺序显示在这里。"
+          }
+        }
+      }
+    },
+    "Open a vault to see its notes here, newest first.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开笔记库后，笔记会按从新到旧的顺序显示在这里。"
+          }
+        }
+      }
+    },
+    "Preparing timeline…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备时间线…"
+          }
+        }
+      }
+    },
+    "Quick Open": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速打开"
+          }
+        }
+      }
+    },
+    "Wiki (LLM)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiki（大语言模型）"
+          }
+        }
+      }
+    },
+    "SOFTWARE UPDATE": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "软件更新"
+          }
+        }
+      }
+    },
+    "Check for Updates…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检查更新…"
+          }
+        }
+      }
+    },
+    "Software Update": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "软件更新"
+          }
+        }
+      }
+    },
+    "Automatically Check for Updates": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动检查更新"
+          }
+        }
+      }
+    },
+    "Checks for new versions once a day when ClipNest opens. Updates are installed only when you choose to download and restart.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ClipNest 启动时每天检查一次新版本。选择下载并重启后才会安装更新。"
+          }
+        }
+      }
+    },
+    "Version %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "版本 %@"
+          }
+        }
+      }
+    },
+    "Installed version: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前版本：%@"
+          }
+        }
+      }
+    },
+    "Checking for updates…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检查更新…"
+          }
+        }
+      }
+    },
+    "ClipNest is up to date.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ClipNest 已是最新版本。"
+          }
+        }
+      }
+    },
+    "ClipNest %@ is available.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ClipNest %@ 已可更新。"
+          }
+        }
+      }
+    },
+    "Your notes will be saved before ClipNest restarts.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ClipNest 重启前会保存正在编辑的笔记。"
+          }
+        }
+      }
+    },
+    "Downloading update… %lld%%": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载更新… %lld%%"
+          }
+        }
+      }
+    },
+    "Verifying update…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在验证更新…"
+          }
+        }
+      }
+    },
+    "Saving notes and restarting…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在保存笔记并重启…"
+          }
+        }
+      }
+    },
+    "Release Notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "版本说明"
+          }
+        }
+      }
+    },
+    "Download and Restart": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并重启"
+          }
+        }
+      }
+    },
+    "Check Again": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新检查"
+          }
+        }
+      }
+    },
+    "The update could not be completed.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未能完成更新。"
+          }
+        }
+      }
+    },
+    "The release does not contain a verified ClipNest update package.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此版本未提供可验证的 ClipNest 更新包。"
+          }
+        }
+      }
+    },
+    "The update server returned HTTP %lld. Try again later.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新服务器返回 HTTP %lld，请稍后重试。"
+          }
+        }
+      }
+    },
+    "The downloaded update failed its integrity check. Download it again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载的更新未通过完整性校验，请重新下载。"
+          }
+        }
+      }
+    },
+    "The update package has the wrong application identity or version.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新包的应用标识或版本不正确。"
+          }
+        }
+      }
+    },
+    "The update is not signed by the ClipNest developer or was modified.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新未使用 ClipNest 开发者签名，或文件已被修改。"
+          }
+        }
+      }
+    },
+    "This update requires a newer version of macOS or a different processor.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此更新需要更高版本的 macOS 或其他处理器架构。"
+          }
+        }
+      }
+    },
+    "Move ClipNest to a writable Applications folder before installing updates.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先将 ClipNest 移到可写入的“应用程序”文件夹，再安装更新。"
+          }
+        }
+      }
+    },
+    "The update installer is missing. Download ClipNest from the releases page.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缺少更新安装程序，请从版本发布页面下载 ClipNest。"
+          }
+        }
+      }
+    },
+    "ClipNest did not quit in time. The installed application was left unchanged.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ClipNest 未能及时退出，已保留当前应用。"
+          }
+        }
+      }
+    },
+    "The updated application could not start. The previous version was restored.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新后的应用无法启动，已恢复上一版本。"
+          }
+        }
+      }
+    },
+    "The previous version could not be restored: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法恢复上一版本：%@"
+          }
+        }
+      }
+    },
+    "The update package could not be unpacked or verified.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法解压或验证更新包。"
+          }
+        }
+      }
+    },
+    "The update could not be completed. Your previous application is saved at %@.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未能完成更新。上一版本应用保存在 %@。"
+          }
+        }
+      }
+    },
+    "The update could not be completed. Your previous application was kept. Please try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未能完成更新，已保留上一版本应用，请重试。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

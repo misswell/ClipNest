@@ -210,6 +210,13 @@ jobs:
           echo "architectures: $architectures"
           [[ "$architectures" == *arm64* ]]
           [[ "$architectures" == *x86_64* ]]
+          updater="$app/Contents/MacOS/ClipNestUpdater"
+          [[ -x "$updater" ]]
+          /usr/bin/lipo "$updater" -verify_arch arm64
+          /usr/bin/lipo "$updater" -verify_arch x86_64
+          codesign --verify --strict "$updater"
+          updater_signature="$(codesign --display --verbose=4 "$updater" 2>&1)"
+          echo "$updater_signature" | grep -q "^TeamIdentifier=$APPLE_TEAM_ID$"
 
           # The archive must be the stapled one, so unpack and re-assess.
           rm -rf "$RUNNER_TEMP/unpacked"

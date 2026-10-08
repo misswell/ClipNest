@@ -26,7 +26,7 @@ final class ExtensionRegistry: ObservableObject {
     }
 
     let catalog: [AppExtension] = [
-        AppExtension(id: "wiki-llm", name: "Wiki (LLM)", publisher: "Tertiary Infotech",
+        AppExtension(id: "wiki-llm", name: String(localized: "Wiki (LLM)"), publisher: "Tertiary Infotech",
                      summary: String(localized: "Turn your vault into an LLM-maintained wiki — ingest sources, auto-link [[pages]], query and lint with Claude Code."),
                      symbol: "books.vertical.fill", installs: String(localized: "Karpathy-style"), hasPanel: true),
         AppExtension(id: "github", name: "GitHub", publisher: "GitHub",

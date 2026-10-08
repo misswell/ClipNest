@@ -24,7 +24,21 @@ enum AppMetrics {
     static let toolbarIconSize: CGFloat = 17
     static let rowIconSize: CGFloat = 18
 
-    /// Minimum tappable side for any standalone control (Apple HIG).
+    #if os(macOS)
+    /// Compact desktop navigation, separate from the touch-sized controls on iOS.
+    enum DesktopNavigation {
+        static let railWidth: CGFloat = 44
+        static let buttonSize: CGFloat = 36
+        static let iconSize: CGFloat = 18
+        static let spacing: CGFloat = 4
+        static let verticalInset: CGFloat = 8
+        static let cornerRadius: CGFloat = 7
+        static let indicatorWidth: CGFloat = 2
+        static let indicatorHeight: CGFloat = 16
+    }
+    #endif
+
+    /// Minimum tappable side for standalone touch controls (Apple HIG).
     static let controlHitSize: CGFloat = 44
 
     static let fabSize: CGFloat = 56

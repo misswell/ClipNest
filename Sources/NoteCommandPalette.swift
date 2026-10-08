@@ -4,6 +4,18 @@ enum NoteCommand: String, CaseIterable, Identifiable {
     case new = "New Note", daily = "Open Daily Note", unique = "Unique Note", random = "Random Note"
     case knowledge = "Knowledge", refresh = "Refresh Vault", quickOpen = "Quick Open…"
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .new: return String(localized: "New Note")
+        case .daily: return String(localized: "Open Daily Note")
+        case .unique: return String(localized: "Unique Note")
+        case .random: return String(localized: "Random Note")
+        case .knowledge: return String(localized: "Knowledge")
+        case .refresh: return String(localized: "Refresh Vault")
+        case .quickOpen: return String(localized: "Quick Open…")
+        }
+    }
 }
 
 struct NoteCommandPalette: View {
@@ -11,12 +23,12 @@ struct NoteCommandPalette: View {
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     private var commands: [NoteCommand] {
-        NoteCommand.allCases.filter { query.isEmpty || String(localized: String.LocalizationValue($0.rawValue)).localizedCaseInsensitiveContains(query) }
+        NoteCommand.allCases.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }
     }
     var body: some View {
         NavigationStack {
             List(commands) { command in
-                Button(LocalizedStringKey(command.rawValue)) { run(command); dismiss() }
+                Button(command.title) { run(command); dismiss() }
                     .disabled(store.rootURL == nil && command != .knowledge)
             }
             .searchable(text: $query, prompt: "Search commands")

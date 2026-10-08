@@ -136,8 +136,7 @@ struct HomeWelcomeView: View {
     @ViewBuilder
     private var inboxRow: some View {
         if let url = store.homeSnapshot.inboxFile {
-            homeRow(title: url.deletingPathExtension().lastPathComponent,
-                    subtitle: "Inbox", date: nil)
+            homeRow(url: url, subtitle: String(localized: "Inbox"), date: nil)
         } else {
             cardHint("Unsorted content and AI failures are kept safe here.")
         }
@@ -151,7 +150,7 @@ struct HomeWelcomeView: View {
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(items) { item in
-                    homeRow(title: item.url.deletingPathExtension().lastPathComponent,
+                    homeRow(url: item.url,
                             subtitle: relativePath(for: item.url),
                             date: item.date)
                     if item.id != items.last?.id {
@@ -205,9 +204,9 @@ struct HomeWelcomeView: View {
         }
     }
 
-    private func homeRow(title: String, subtitle: String, date: Date?) -> some View {
+    private func homeRow(url: URL, subtitle: String, date: Date?) -> some View {
         Button {
-            store.selectedFileURL = currentRowURL(title: title, subtitle: subtitle)
+            store.selectedFileURL = url
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "doc.text")
@@ -215,7 +214,7 @@ struct HomeWelcomeView: View {
                     .foregroundStyle(Color(hex: 0x6FB3D2))
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
+                    Text(url.deletingPathExtension().lastPathComponent)
                         .font(.system(size: 12))
                         .foregroundStyle(VSCode.fg)
                         .lineLimit(1)
@@ -240,17 +239,7 @@ struct HomeWelcomeView: View {
         .buttonStyle(.plain)
     }
 
-    /// `homeRow` is shared by the Inbox card (which only knows the file URL) and the Recent
-    /// list (which has the item in hand); both resolve to "select this note", so recover the
-    /// URL from the snapshot instead of threading a second closure through the cards.
-    private func currentRowURL(title: String, subtitle: String) -> URL? {
-        if subtitle == "Inbox" { return store.homeSnapshot.inboxFile }
-        return store.homeSnapshot.markdownFiles.first {
-            $0.deletingPathExtension().lastPathComponent == title
-        }
-    }
-
-    private func cardHint(_ text: String) -> some View {
+    private func cardHint(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.system(size: 11))
             .foregroundStyle(VSCode.muted)
@@ -281,7 +270,7 @@ struct HomeWelcomeView: View {
         .padding(.top, 4)
     }
 
-    private func shortcut(_ name: String, _ keys: String) -> some View {
+    private func shortcut(_ name: LocalizedStringKey, _ keys: String) -> some View {
         HStack(spacing: 6) {
             Text(name).font(.system(size: 11)).foregroundStyle(VSCode.muted)
             Text(keys)

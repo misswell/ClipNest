@@ -393,6 +393,7 @@ private struct LocalMarkdownImageView: View {
     @State private var resolvedURL: URL?
     @State private var didFinishLoading = false
     @State private var loadRequestGate = PreviewRequestGate()
+    @State private var reloadAttempt = 0
 
     init(url: URL? = nil,
          source: String,
@@ -427,6 +428,8 @@ private struct LocalMarkdownImageView: View {
                     Text("Missing image: \(source)")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedInk)
+                    Button("Retry") { reloadAttempt &+= 1 }
+                        .buttonStyle(.bordered)
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -453,7 +456,8 @@ private struct LocalMarkdownImageView: View {
                 }.value
             }
 
-            guard loadRequestGate.accepts(loadRequest), let resolved else {
+            guard loadRequestGate.accepts(loadRequest) else { return }
+            guard let resolved else {
                 didFinishLoading = true
                 return
             }
@@ -471,7 +475,7 @@ private struct LocalMarkdownImageView: View {
     }
 
     private var lookupID: String {
-        [source, url?.path ?? "", documentURL?.path ?? "", vaultRootURL?.path ?? ""]
+        [source, url?.path ?? "", documentURL?.path ?? "", vaultRootURL?.path ?? "", String(reloadAttempt)]
             .joined(separator: "\u{1F}")
     }
 }

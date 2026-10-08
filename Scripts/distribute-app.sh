@@ -74,6 +74,11 @@ xcodebuild -project ClipNest.xcodeproj -scheme ClipNest \
     build
 
 [[ -d "$APP" ]] || { echo "Missing built app at $APP" >&2; exit 1; }
+UPDATER="$APP/Contents/MacOS/ClipNestUpdater"
+[[ -x "$UPDATER" ]] || { echo "Missing update installer at $UPDATER" >&2; exit 1; }
+for updater_arch in $ARCHS_WANTED; do
+    /usr/bin/lipo "$UPDATER" -verify_arch "$updater_arch"
+done
 
 echo "==> Signing with $SIGN_IDENTITY"
 ENTITLEMENTS="$ROOT/Sources/MarkdownVault.entitlements"
@@ -86,9 +91,8 @@ echo "--- identities visible while signing ---"
 security find-identity -v -p codesigning || true
 
 # Inside out: embedded code must be sealed before the bundle that contains it, otherwise
-# the outer signature is computed over unsigned nested binaries. Today the main executable
-# is the only Mach-O in the bundle, so this loop is a no-op, but a future dependency can
-# add an embedded framework or dylib and this keeps the seal correct when it does.
+# the outer signature is computed over unsigned nested binaries.
+codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$UPDATER"
 while IFS= read -r -d '' nested; do
     codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$nested"
 done < <(find "$APP/Contents" -depth \
@@ -102,6 +106,12 @@ codesign --force --timestamp --options runtime \
     --sign "$SIGN_IDENTITY" "$APP"
 
 codesign --verify --deep --strict "$APP"
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
+    # The update verifier pins the existing desktop Developer ID. A different team
+    # would produce a release that current installations cannot accept.
+    codesign --verify --strict -R \
+        '=anchor apple generic and certificate leaf[subject.OU] = "U8U443D7ZL" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists' "$APP"
+fi
 
 echo "==> Zipping for notarization"
 rm -f "$ZIP"

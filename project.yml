@@ -11,6 +11,7 @@ settings:
     MARKETING_VERSION: "1.5"
     CURRENT_PROJECT_VERSION: "13"
     SWIFT_VERSION: "5.0"
+    SWIFT_EMIT_LOC_STRINGS: YES
     DEVELOPMENT_TEAM: "GU9WTSTX9M"
     CODE_SIGN_STYLE: Automatic
     INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
@@ -48,9 +49,18 @@ targets:
       macOS: "14.0"
     sources:
       - Sources
+      - path: UpdaterSupport
+        destinationFilters: [macOS]
       - path: Resources/SampleVault
         type: folder
     dependencies:
+      - target: ClipNestUpdater
+        destinationFilters: [macOS]
+        embed: true
+        link: false
+        codeSign: true
+        copy:
+          destination: executables
       - package: Yams
       - package: SwiftTerm
       # Only the four products the local model runtime needs. `MLXLLM` carries the
@@ -91,6 +101,21 @@ targets:
       properties:
         com.apple.security.app-sandbox: false
         com.apple.security.device.audio-input: true
+
+  ClipNestUpdater:
+    type: tool
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Updater
+      - UpdaterSupport
+    settings:
+      base:
+        PRODUCT_NAME: ClipNestUpdater
+        PRODUCT_BUNDLE_IDENTIFIER: com.tertiaryinfotech.clipnest.updater
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: NO
+        CREATE_INFOPLIST_SECTION_IN_BINARY: NO
 
   ClipNestTests:
     type: bundle.unit-test

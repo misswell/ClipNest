@@ -116,6 +116,7 @@ struct EditorPane: View {
             }
         }
         .onDisappear { flush() }
+        .onReceive(NotificationCenter.default.publisher(for: .saveBeforeSoftwareUpdate)) { _ in flush() }
         .onChange(of: store.lastLinkMutation) { _, mutation in
             guard let mutation, let current = loadedURL else { return }
             saveTask?.cancel()
