@@ -6,6 +6,7 @@ import SwiftUI
 /// turned off is not shown as an empty field, it is not there at all. What the user sees is
 /// what will be rendered into the vault.
 struct GeneratedNotePreview: View {
+    @EnvironmentObject private var store: VaultStore
     @State private var draft: GeneratedNoteDraft
 
     let onSave: (GeneratedNoteDraft) -> Void
@@ -21,6 +22,44 @@ struct GeneratedNotePreview: View {
 
     private var format: NoteFormatConfiguration { draft.format }
 
+    /// The folder this note will be written to, chosen from the ones that already exist.
+    ///
+    /// The field used to be free text, so typing a near-miss of an existing folder name created a
+    /// second folder for the same subject — and the directory *is* a note's category, the only
+    /// record of it anywhere on disk. A suggestion with no folder yet stays in the list, so a
+    /// genuinely new one remains a deliberate choice instead of a typo.
+    private var folderPicker: some View {
+        Picker("Folder", selection: categoryBinding) {
+            ForEach(folderOptions, id: \.self) { name in
+                Text(name).tag(name)
+            }
+        }
+        .pickerStyle(.menu)
+    }
+
+    private var categoryBinding: Binding<String> {
+        Binding(
+            get: {
+                folderOptions.first { $0.caseInsensitiveCompare(draft.category) == .orderedSame }
+                    ?? draft.category
+            },
+            set: { draft.category = $0 }
+        )
+    }
+
+    private var folderOptions: [String] {
+        let existing = store.topLevelCategories()
+        let suggested = draft.category.trimmingCharacters(in: .whitespacesAndNewlines)
+        let names: [String]
+        if suggested.isEmpty
+            || existing.contains(where: { $0.caseInsensitiveCompare(suggested) == .orderedSame }) {
+            names = existing
+        } else {
+            names = existing + [suggested]
+        }
+        return names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -30,7 +69,7 @@ struct GeneratedNotePreview: View {
                         TextField("Summary", text: $draft.summary, axis: .vertical)
                             .lineLimit(2...4)
                     }
-                    TextField("Category", text: $draft.category)
+                    folderPicker
                     if format.includeTags {
                         TextField("Tags (comma separated)", text: tagsBinding)
                     }

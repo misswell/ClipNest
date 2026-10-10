@@ -63,6 +63,9 @@ enum NoteOpenIntent: Hashable {
 /// Editor + live preview for a single markdown/text file. Autosaves on edit.
 struct MarkdownEditorView: View {
     @EnvironmentObject var store: VaultStore
+    /// Carried so a note that just arrived from a capture can be told apart from one the user
+    /// opened — the folder pill lights up only for the former.
+    @EnvironmentObject private var selection: VaultSelection
     let url: URL
     /// The mode this document starts in. Reset for every newly opened note — never persisted.
     var intent: NoteOpenIntent = .view
@@ -87,6 +90,7 @@ struct MarkdownEditorView: View {
     @State private var relocatedURL: URL?
     @State private var showInspector = false
     @State private var showPresentation = false
+    @State private var showFolderHint = false
     @State private var linkedURL: URL?
     @State private var linkedHeading: String?
     @State private var scrollHeading: String?
@@ -136,7 +140,6 @@ struct MarkdownEditorView: View {
             }
         }
         .navigationTitle(normalizedURL.deletingPathExtension().lastPathComponent)
-        .modifier(NavigationSubtitleModifier(text: folderSubtitle))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -144,6 +147,12 @@ struct MarkdownEditorView: View {
             if isDocumentReady {
                 toolbarContent
             }
+        }
+        // The folder pill belongs on the page rather than only inside the "…" menu: a capture
+        // files the note wherever the classifier guessed, and the moment to correct that is the
+        // one the user is already looking at.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if isDocumentReady { folderChipRow }
         }
         .alert("Delete Note", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -197,6 +206,16 @@ struct MarkdownEditorView: View {
             if text != loadedTextSnapshot { store.save(text, to: destination) }
         }
         .onChange(of: url) { _, _ in relocatedURL = nil }
+        .task(id: selection.documentSource) {
+            guard selection.documentSource == .quickPaste else {
+                showFolderHint = false
+                return
+            }
+            withAnimation { showFolderHint = true }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation { showFolderHint = false }
+        }
         .task(id: LoadKey(url: normalizedURL, attempt: reloadAttempt)) {
             if isDocumentReady { return }
             await loadDocument()
@@ -331,22 +350,6 @@ struct MarkdownEditorView: View {
     @ViewBuilder
     private var documentContent: some View {
         VStack(spacing: 0) {
-            // Pre-iOS 26 navigation bars cannot render a subtitle, so the folder falls back
-            // to a small breadcrumb above the content there.
-            if !showsNavigationSubtitle {
-                HStack(spacing: 4) {
-                    AppRowIcon(systemImage: "folder", tint: Theme.mutedInk)
-                    Text(folderSubtitle)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-                .font(.caption)
-                .foregroundStyle(Theme.mutedInk)
-                .padding(.horizontal, AppMetrics.screenHorizontal)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.background)
-            }
             switch effectiveMode {
             case .edit:
                 editor
@@ -383,24 +386,17 @@ struct MarkdownEditorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Folder of the open note, relative to the vault root. Notes at the root fall back to
-    /// the vault name so the subtitle always says something meaningful.
-    private var folderSubtitle: String {
-        guard let root = store.rootURL else { return "" }
-        let rootPath = root.standardizedFileURL.path
-        let filePath = normalizedURL.standardizedFileURL.path
-        guard filePath.hasPrefix(rootPath + "/") else { return store.vaultName }
-        let folderComponents = filePath
-            .dropFirst(rootPath.count + 1)
-            .split(separator: "/")
-            .dropLast()
-        guard !folderComponents.isEmpty else { return store.vaultName }
-        return folderComponents.joined(separator: " / ")
-    }
-
-    private var showsNavigationSubtitle: Bool {
-        if #available(iOS 26.0, *) { return true }
-        return false
+    /// Folder of the open note, as the move control itself. A path the user can only read is a
+    /// path they cannot fix, so this row is the pill rather than the subtitle it replaced.
+    private var folderChipRow: some View {
+        HStack(spacing: 0) {
+            NoteFolderChip(fileURL: normalizedURL, emphasised: showFolderHint)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, AppMetrics.screenHorizontal)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .background(Theme.background)
     }
 
     // MARK: - Toolbar
@@ -552,20 +548,6 @@ struct MarkdownEditorView: View {
     }
     private func insert(wrap: String) { insert(snippet: "\(wrap)text\(wrap)") }
     private func insertLinePrefix(_ prefix: String) { insert(snippet: "\(prefix)") }
-}
-
-/// navigationSubtitle is iOS 26+ on iOS but has existed on macOS for years, so the
-/// availability gate only needs the iOS version; on macOS the branch is always taken.
-private struct NavigationSubtitleModifier: ViewModifier {
-    let text: String
-
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, macOS 11.0, *) {
-            content.navigationSubtitle(Text(text))
-        } else {
-            content
-        }
-    }
 }
 
 /// A plain cross-platform multiline text editor wrapper (keeps a single call-site

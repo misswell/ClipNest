@@ -48,6 +48,8 @@ enum ClipNestSettings {
     static let autoClassify = "classification.autoClassify"
     static let allowNewCategories = "classification.allowNewCategories"
     static let defaultCategory = "classification.defaultCategory"
+    /// Folders a note was just moved into, newest first, newline-separated absolute paths.
+    static let recentMoveFolders = "notes.recentMoveFolders"
 
     static let lastClipboardHash = "capture.lastClipboardHash"
     static let lastSeenClipboardHash = "capture.lastSeenClipboardHash"

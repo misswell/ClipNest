@@ -6529,6 +6529,56 @@
           }
         }
       }
+    },
+    "Folder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件夹"
+          }
+        }
+      }
+    },
+    "Tap to change folder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点这里换文件夹"
+          }
+        }
+      }
+    },
+    "All Folders…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部文件夹…"
+          }
+        }
+      }
+    },
+    "Move to Folder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移动到文件夹"
+          }
+        }
+      }
+    },
+    "Move to another folder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移动到其他文件夹"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

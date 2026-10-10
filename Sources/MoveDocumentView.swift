@@ -110,6 +110,7 @@ struct MoveDocumentView: View {
                 store.operationError = nil
                 return
             }
+            RecentMoveFolders.record(destination)
             onCompleted()
             dismiss()
         }

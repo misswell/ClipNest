@@ -229,6 +229,22 @@ final class DocumentManagementTests: XCTestCase {
     }
     #endif
 
+    func testRecentMoveFoldersKeepNewestFirstWithoutDuplicates() {
+        let key = ClipNestSettings.recentMoveFolders
+        let previous = UserDefaults.standard.string(forKey: key)
+        defer { UserDefaults.standard.set(previous, forKey: key) }
+
+        let top = root.appendingPathComponent("工作")
+        let nested = top.appendingPathComponent("2026")
+        RecentMoveFolders.record(top)
+        RecentMoveFolders.record(nested)
+        RecentMoveFolders.record(top)
+
+        XCTAssertEqual(RecentMoveFolders.paths(
+            in: UserDefaults.standard.string(forKey: key) ?? ""),
+            [top.standardizedFileURL.path, nested.standardizedFileURL.path])
+    }
+
     private func waitForBody(_ body: String, at url: URL) async throws {
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {

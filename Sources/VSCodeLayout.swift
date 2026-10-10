@@ -33,6 +33,9 @@ struct VSCodeLayout: View {
     @State private var newFileName = "Untitled.md"
     @State private var renameTarget: RenameItemTarget?
     @State private var moveTarget: MoveDocumentTarget?
+    /// Lights up the editor's folder pill for a few seconds after a capture, the same way it does
+    /// on the phone: the folder a note just landed in is the one thing worth re-checking then.
+    @State private var showFolderHint = false
 
     private var editorMode: Binding<EditorMode> {
         Binding(
@@ -112,6 +115,16 @@ struct VSCodeLayout: View {
             onOpenExtension: { activeExtension = $0 }
         ))
         .onChange(of: selection.fileURL) { _, url in openTab(url) }
+        .task(id: selection.documentSource) {
+            guard selection.documentSource == .quickPaste else {
+                showFolderHint = false
+                return
+            }
+            withAnimation { showFolderHint = true }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation { showFolderHint = false }
+        }
         .onChange(of: store.lastDocumentMove) { _, move in
             guard let move else { return }
             updateOpenTabs(for: move)
@@ -302,6 +315,7 @@ struct VSCodeLayout: View {
                     ModeToggle(mode: editorMode)
                 }
                 if let url = selection.fileURL {
+                    NoteFolderChip(fileURL: url, emphasised: showFolderHint)
                     documentActionsMenu(url)
                 }
             }
