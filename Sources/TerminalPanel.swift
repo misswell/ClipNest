@@ -3,6 +3,10 @@ import SwiftUI
 
 /// Owns the set of live terminal sessions. Held above the panel view so terminals keep
 /// running even while the panel is collapsed.
+///
+/// Main-actor-isolated because `TerminalSession` inherits the isolation of SwiftTerm's
+/// `@MainActor` delegate protocol, and every call site here is a view.
+@MainActor
 final class TerminalController: ObservableObject {
     @Published var sessions: [TerminalSession] = []
     @Published var activeID: UUID?
