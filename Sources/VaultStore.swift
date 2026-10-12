@@ -285,7 +285,13 @@ final class VaultStore: ObservableObject {
                                       options: options,
                                       relativeTo: nil,
                                       bookmarkDataIsStale: &stale) {
-                    if stale { saveBookmark(for: url) }
+                    if stale {
+                        saveBookmark(for: url)
+                    } else {
+                        // Record the path even while the bookmark still resolves: it is what the
+                        // next launch falls back to once this bookmark stops resolving.
+                        defaults.set(url.path, forKey: Keys.lastPath)
+                    }
                     return url
                 }
             }

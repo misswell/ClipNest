@@ -258,6 +258,21 @@ final class DocumentManagementTests: XCTestCase {
         XCTAssertNil(VaultStore.preferences.string(forKey: "vault.lastPath"))
     }
 
+    /// The fallback has to exist from the first launch that restores a working bookmark, not only
+    /// after the user happens to reopen the folder by hand.
+    func testRestoringAWorkingBookmarkAlsoRecordsItsPath() {
+        VaultStore.preferences.removeObject(forKey: "vault.lastPath")
+        XCTAssertNotNil(VaultStore.preferences.data(forKey: "vault.bookmark"))
+
+        let reopened = VaultStore()
+        reopened.restoreVaultIfNeeded()
+
+        let recorded = VaultStore.preferences.string(forKey: "vault.lastPath") ?? ""
+        XCTAssertEqual(URL(fileURLWithPath: recorded).resolvingSymlinksInPath().path,
+                       root.resolvingSymlinksInPath().path)
+        reopened.closeVault()
+    }
+
     private func waitForBody(_ body: String, at url: URL) async throws {
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
