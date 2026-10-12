@@ -245,6 +245,19 @@ final class DocumentManagementTests: XCTestCase {
             [top.standardizedFileURL.path, nested.standardizedFileURL.path])
     }
 
+    /// An update replaces the app bundle, and a plain bookmark for an iCloud folder stops
+    /// resolving once that folder is remounted. The remembered path has to bring the vault back,
+    /// otherwise every restart looks like a first run.
+    func testVaultReopensFromTheRememberedPathWhenTheBookmarkCannotResolve() {
+        VaultStore.preferences.set(Data("not a bookmark".utf8), forKey: "vault.bookmark")
+        let reopened = VaultStore()
+        reopened.restoreVaultIfNeeded()
+
+        XCTAssertEqual(reopened.rootURL?.standardizedFileURL.path, root.standardizedFileURL.path)
+        reopened.closeVault()
+        XCTAssertNil(VaultStore.preferences.string(forKey: "vault.lastPath"))
+    }
+
     private func waitForBody(_ body: String, at url: URL) async throws {
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {

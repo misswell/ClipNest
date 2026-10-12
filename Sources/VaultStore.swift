@@ -85,13 +85,13 @@ final class VaultStore: ObservableObject {
     @Published var openVaultStartingDirectory: URL?
 
     @Published var showHiddenFiles = false {
-        didSet { UserDefaults.standard.set(showHiddenFiles, forKey: Keys.showHidden); refresh() }
+        didSet { defaults.set(showHiddenFiles, forKey: Keys.showHidden); refresh() }
     }
 
     /// Explorer sort direction (folders always group first). Persisted.
     @Published var sortAscending = true {
         didSet {
-            UserDefaults.standard.set(sortAscending, forKey: Keys.sortAsc)
+            defaults.set(sortAscending, forKey: Keys.sortAsc)
             guard !isInitializing else { return }
             // Choosing an alphabetical direction exits manual order mode. A later
             // explicit move creates a new manual order for the affected directory.
@@ -115,6 +115,7 @@ final class VaultStore: ObservableObject {
 
     private enum Keys {
         static let bookmark = "vault.bookmark"
+        static let lastPath = "vault.lastPath"
         static let showHidden = "settings.showHidden"
         static let onboarded = "vault.onboarded"
         static let sortAsc = "settings.sortAscending"
@@ -122,6 +123,17 @@ final class VaultStore: ObservableObject {
         static let displayNames = "vault.displayNames"
         static let childOrders = "vault.childOrders"
     }
+
+    /// Unit tests run inside this bundle identifier, so `UserDefaults.standard` is the
+    /// developer's own preference file: a test that opened and closed a vault deleted the vault
+    /// the person was actually working in. Tests get their own domain instead.
+    static let preferences: UserDefaults = {
+        guard NSClassFromString("XCTestCase") != nil,
+              let suite = UserDefaults(suiteName: "ClipNestTests") else { return .standard }
+        return suite
+    }()
+
+    private let defaults = VaultStore.preferences
 
     private var accessing: URL?
     /// Manual child order keyed by directory path. Values are absolute standardized paths
@@ -143,12 +155,12 @@ final class VaultStore: ObservableObject {
     private var isInitializing = true
 
     init() {
-        showHiddenFiles = UserDefaults.standard.bool(forKey: Keys.showHidden)
-        sortAscending = UserDefaults.standard.object(forKey: Keys.sortAsc) as? Bool ?? true
-        recentVaults = (UserDefaults.standard.array(forKey: Keys.recents) as? [String] ?? [])
+        showHiddenFiles = defaults.bool(forKey: Keys.showHidden)
+        sortAscending = defaults.object(forKey: Keys.sortAsc) as? Bool ?? true
+        recentVaults = (defaults.array(forKey: Keys.recents) as? [String] ?? [])
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
-        displayNames = UserDefaults.standard.dictionary(forKey: Keys.displayNames) as? [String: String] ?? [:]
-        if let rawOrders = UserDefaults.standard.dictionary(forKey: Keys.childOrders) {
+        displayNames = defaults.dictionary(forKey: Keys.displayNames) as? [String: String] ?? [:]
+        if let rawOrders = defaults.dictionary(forKey: Keys.childOrders) {
             childOrders = rawOrders.reduce(into: [String: [String]]()) { result, entry in
                 if let paths = entry.value as? [String] {
                     result[entry.key] = paths
@@ -190,12 +202,12 @@ final class VaultStore: ObservableObject {
         var list = recentVaults.filter { $0.standardizedFileURL != url.standardizedFileURL }
         list.insert(url, at: 0)
         recentVaults = Array(list.prefix(10))
-        UserDefaults.standard.set(recentVaults.map(\.path), forKey: Keys.recents)
+        defaults.set(recentVaults.map(\.path), forKey: Keys.recents)
     }
 
     func removeRecent(_ url: URL) {
         recentVaults.removeAll { $0.standardizedFileURL == url.standardizedFileURL }
-        UserDefaults.standard.set(recentVaults.map(\.path), forKey: Keys.recents)
+        defaults.set(recentVaults.map(\.path), forKey: Keys.recents)
     }
 
     /// Copy the bundled sample vault into the app's Documents directory (writable, no
@@ -225,34 +237,19 @@ final class VaultStore: ObservableObject {
     func restoreVaultIfNeeded() {
         defer { didRestoreVault = true }
         guard rootURL == nil else { return }
-        // First-ever launch with no saved vault: seed the sample vault for onboarding.
-        if UserDefaults.standard.data(forKey: Keys.bookmark) == nil {
-            if !UserDefaults.standard.bool(forKey: Keys.onboarded) {
-                UserDefaults.standard.set(true, forKey: Keys.onboarded)
+        // First-ever launch with nothing remembered: seed the sample vault for onboarding.
+        if defaults.data(forKey: Keys.bookmark) == nil && defaults.string(forKey: Keys.lastPath) == nil {
+            if !defaults.bool(forKey: Keys.onboarded) {
+                defaults.set(true, forKey: Keys.onboarded)
                 openSampleVault()
             }
             return
         }
-        guard let data = UserDefaults.standard.data(forKey: Keys.bookmark) else { return }
-        var stale = false
-        // Try a plain resolution first; fall back to a security-scoped one so bookmarks
-        // saved by an earlier sandboxed build still resolve.
-        var resolved: URL?
-        for options in bookmarkResolutionOptionSets {
-            if let url = try? URL(resolvingBookmarkData: data,
-                                  options: options,
-                                  relativeTo: nil,
-                                  bookmarkDataIsStale: &stale) {
-                resolved = url
-                break
-            }
-        }
-        guard let url = resolved else { return }
+        guard let url = savedVaultURL() else { return }
         if url.startAccessingSecurityScopedResource() {
             accessing = url
         }
         rootURL = url
-        if stale { saveBookmark(for: url) }
         addRecent(url)
         VaultTrash.purgeOlderThan(Date().addingTimeInterval(-VaultTrash.autoPurgeInterval), in: url)
         refresh()
@@ -273,7 +270,34 @@ final class VaultStore: ObservableObject {
         isTreeLoading = false
         isHomeSnapshotLoading = false
         selectedFileURL = nil
-        UserDefaults.standard.removeObject(forKey: Keys.bookmark)
+        defaults.removeObject(forKey: Keys.bookmark)
+        defaults.removeObject(forKey: Keys.lastPath)
+    }
+
+    /// The vault to reopen: the saved bookmark first, then the folder it pointed at. A plain
+    /// bookmark stops resolving once an iCloud folder is remounted, which is what left ClipNest
+    /// with no vault after an update — the remembered path is the memory that survives.
+    private func savedVaultURL() -> URL? {
+        if let data = defaults.data(forKey: Keys.bookmark) {
+            for options in bookmarkResolutionOptionSets {
+                var stale = false
+                if let url = try? URL(resolvingBookmarkData: data,
+                                      options: options,
+                                      relativeTo: nil,
+                                      bookmarkDataIsStale: &stale) {
+                    if stale { saveBookmark(for: url) }
+                    return url
+                }
+            }
+        }
+        guard let path = defaults.string(forKey: Keys.lastPath) else { return nil }
+        var isDirectory = ObjCBool(false)
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            return nil
+        }
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+        saveBookmark(for: url)
+        return url
     }
 
     /// Resolution options to attempt, in order. Plain bookmarks work in this non-sandboxed
@@ -289,8 +313,9 @@ final class VaultStore: ObservableObject {
     private func saveBookmark(for url: URL) {
         // Non-sandboxed macOS uses plain bookmarks (no security scope needed).
         if let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
-            UserDefaults.standard.set(data, forKey: Keys.bookmark)
+            defaults.set(data, forKey: Keys.bookmark)
         }
+        defaults.set(url.path, forKey: Keys.lastPath)
     }
 
     private func stopAccessing() {
@@ -316,7 +341,7 @@ final class VaultStore: ObservableObject {
         } else {
             displayNames[rootURL.path] = trimmed
         }
-        UserDefaults.standard.set(displayNames, forKey: Keys.displayNames)
+        defaults.set(displayNames, forKey: Keys.displayNames)
     }
 
     /// Display name for any vault URL (used by the recent-vaults list).
@@ -933,7 +958,7 @@ final class VaultStore: ObservableObject {
     }
 
     private func persistChildOrders() {
-        UserDefaults.standard.set(childOrders, forKey: Keys.childOrders)
+        defaults.set(childOrders, forKey: Keys.childOrders)
     }
 
     private func updateOrderAfterMoving(source: URL,
