@@ -144,7 +144,7 @@ final class SoftwareUpdateTests: XCTestCase {
         let updater = SoftwareUpdate(session: session, currentVersion: "1.5")
         updater.check()
         while updater.isBusy { try await Task.sleep(nanoseconds: 10_000_000) }
-        let host = NSHostingView(rootView: SoftwareUpdateView(updater: updater).environmentObject(VaultStore()))
+        let host = NSHostingView(rootView: SoftwareUpdateView(updater: updater, store: VaultStore()))
         host.frame = NSRect(x: 0, y: 0, width: 480, height: 360)
         host.layoutSubtreeIfNeeded()
         let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))

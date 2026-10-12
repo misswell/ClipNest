@@ -12,10 +12,11 @@ struct SoftwareUpdateCommands: Commands {
 
 struct SoftwareUpdatePresentation: ViewModifier {
     @ObservedObject private var updater = SoftwareUpdate.shared
+    let store: VaultStore
     func body(content: Content) -> some View {
         content
             .disabled(updater.blocksEditing)
-            .sheet(isPresented: $updater.showUpdate) { SoftwareUpdateView(updater: updater) }
+            .sheet(isPresented: $updater.showUpdate) { SoftwareUpdateView(updater: updater, store: store) }
             .task { updater.start() }
     }
 }
@@ -39,7 +40,10 @@ struct SoftwareUpdateSettings: View {
 
 struct SoftwareUpdateView: View {
     @ObservedObject var updater: SoftwareUpdate
-    @EnvironmentObject private var store: VaultStore
+    /// Injected rather than read from the environment: this sheet is anchored on the window root,
+    /// where scene-level environment objects never reach it. In 1.5 and 1.6 tapping "Download and
+    /// Restart" trapped on an uninjected `VaultStore`.
+    let store: VaultStore
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {

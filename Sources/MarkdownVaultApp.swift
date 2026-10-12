@@ -23,7 +23,7 @@ struct MarkdownVaultApp: App {
                 .environmentObject(search)
                 .tint(Theme.accent)
                 #if os(macOS)
-                .modifier(SoftwareUpdatePresentation())
+                .modifier(SoftwareUpdatePresentation(store: store))
                 #endif
                 .task {
                     // The local model is loaded on demand and released under memory pressure
