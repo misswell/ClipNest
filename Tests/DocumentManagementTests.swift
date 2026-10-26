@@ -273,6 +273,59 @@ final class DocumentManagementTests: XCTestCase {
         reopened.closeVault()
     }
 
+    func testVaultSelectionSurvivesANewStoreWithoutClosingTheOriginal() {
+        let reopened = VaultStore()
+        reopened.restoreVaultIfNeeded()
+        XCTAssertEqual(reopened.rootURL?.resolvingSymlinksInPath(), root.resolvingSymlinksInPath())
+        reopened.closeVault()
+    }
+
+    func testUnavailableVaultKeepsItsSelectionAndRestoresWhenItReturns() throws {
+        let moved = root.appendingPathExtension("offline")
+        try FileManager.default.moveItem(at: root, to: moved)
+        defer { try? FileManager.default.moveItem(at: moved, to: root) }
+        // A disconnected provider has no resolvable bookmark, even though its saved path remains.
+        VaultStore.preferences.set(Data("offline bookmark".utf8), forKey: "vault.bookmark")
+        let reopened = VaultStore()
+        reopened.restoreVaultIfNeeded()
+        XCTAssertNil(reopened.rootURL)
+        XCTAssertEqual(VaultStore.preferences.string(forKey: "vault.lastPath"), root.path)
+        try FileManager.default.moveItem(at: moved, to: root)
+        reopened.restoreVaultIfNeeded()
+        XCTAssertEqual(reopened.rootURL?.standardizedFileURL, root.standardizedFileURL)
+        reopened.closeVault()
+    }
+
+    func testLegacyBookmarkFailureCanUseTheLastRecentVaultWithoutARecordedPath() {
+        VaultStore.preferences.removeObject(forKey: "vault.lastPath")
+        VaultStore.preferences.set(Data("legacy bookmark".utf8), forKey: "vault.bookmark")
+        let reopened = VaultStore()
+        reopened.restoreVaultIfNeeded()
+        XCTAssertEqual(reopened.rootURL?.standardizedFileURL, root.standardizedFileURL)
+        reopened.closeVault()
+    }
+
+    func testExplicitCloseDoesNotReopenOrSeedASampleVault() {
+        store.closeVault()
+        let reopened = VaultStore()
+        reopened.restoreVaultIfNeeded()
+        XCTAssertNil(reopened.rootURL)
+        XCTAssertNil(VaultStore.preferences.string(forKey: "vault.lastPath"))
+    }
+
+    func testUpdatedIOSContainerRebasesOnlyAppOwnedDocuments() throws {
+        let previous = "/private/var/mobile/Containers/Data/Application/\(UUID().uuidString)/Documents/Notes/Personal"
+        let relative = try XCTUnwrap(VaultStore.legacyDocumentsRelativePath(previous))
+        let current = URL(fileURLWithPath: "/private/var/mobile/Containers/Data/Application/\(UUID().uuidString)/Documents")
+        XCTAssertEqual(VaultStore.documentsVaultURL(relativePath: relative, documents: current)?.path,
+                       current.appendingPathComponent("Notes/Personal").path)
+        XCTAssertNil(VaultStore.legacyDocumentsRelativePath("/Users/person/Documents/Notes"))
+        XCTAssertNil(VaultStore.legacyDocumentsRelativePath("/private/var/mobile/Containers/Shared/AppGroup/\(UUID().uuidString)/Documents/Notes"))
+        XCTAssertNil(VaultStore.documentsVaultURL(relativePath: "../Other", documents: current))
+        XCTAssertNil(VaultStore.documentsVaultURL(relativePath: "/Other", documents: current))
+        XCTAssertEqual(VaultStore.documentsVaultURL(relativePath: "", documents: current), current)
+    }
+
     private func waitForBody(_ body: String, at url: URL) async throws {
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {

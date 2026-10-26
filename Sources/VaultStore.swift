@@ -116,6 +116,7 @@ final class VaultStore: ObservableObject {
     private enum Keys {
         static let bookmark = "vault.bookmark"
         static let lastPath = "vault.lastPath"
+        static let documentsRelativePath = "vault.documentsRelativePath"
         static let showHidden = "settings.showHidden"
         static let onboarded = "vault.onboarded"
         static let sortAsc = "settings.sortAscending"
@@ -272,11 +273,23 @@ final class VaultStore: ObservableObject {
         selectedFileURL = nil
         defaults.removeObject(forKey: Keys.bookmark)
         defaults.removeObject(forKey: Keys.lastPath)
+        defaults.removeObject(forKey: Keys.documentsRelativePath)
+        defaults.set(true, forKey: Keys.onboarded)
     }
 
-    /// The vault to reopen: the saved bookmark first, then the folder it pointed at. A plain
-    /// bookmark stops resolving once an iCloud folder is remounted, which is what left ClipNest
-    /// with no vault after an update — the remembered path is the memory that survives.
+    /// Keep the saved selection when a provider/iCloud drive is temporarily unavailable.
+    /// Retry at startup and whenever the app becomes active; only an explicit close forgets it.
+    func restoreVaultWithRetries() async {
+        restoreVaultIfNeeded()
+        for delay in [1, 3, 10, 30] {
+            guard rootURL == nil, defaults.string(forKey: Keys.lastPath) != nil ||
+                    defaults.data(forKey: Keys.bookmark) != nil else { return }
+            do { try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000) }
+            catch { return }
+            restoreVaultIfNeeded()
+        }
+    }
+
     private func savedVaultURL() -> URL? {
         if let data = defaults.data(forKey: Keys.bookmark) {
             for options in bookmarkResolutionOptionSets {
@@ -285,43 +298,87 @@ final class VaultStore: ObservableObject {
                                       options: options,
                                       relativeTo: nil,
                                       bookmarkDataIsStale: &stale) {
-                    if stale {
-                        saveBookmark(for: url)
-                    } else {
-                        // Record the path even while the bookmark still resolves: it is what the
-                        // next launch falls back to once this bookmark stops resolving.
-                        defaults.set(url.path, forKey: Keys.lastPath)
-                    }
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    guard Self.isDirectory(url) else { continue }
+                    // Refresh legacy plain bookmarks as well as stale scoped bookmarks.
+                    saveBookmark(for: url)
                     return url
                 }
             }
         }
-        guard let path = defaults.string(forKey: Keys.lastPath) else { return nil }
-        var isDirectory = ObjCBool(false)
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            return nil
+        #if os(iOS)
+        // The app's data-container UUID may change during an update. Store a Documents-
+        // relative location for app-owned vaults, and migrate old absolute paths too.
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let relativePath = defaults.string(forKey: Keys.documentsRelativePath)
+            ?? defaults.string(forKey: Keys.lastPath).flatMap(Self.legacyDocumentsRelativePath)
+        if let relativePath,
+           let url = Self.documentsVaultURL(relativePath: relativePath, documents: documents),
+           Self.isDirectory(url) {
+            saveBookmark(for: url)
+            return url
         }
+        #endif
+        guard let path = defaults.string(forKey: Keys.lastPath)
+            ?? (defaults.array(forKey: Keys.recents) as? [String])?.first else { return nil }
         let url = URL(fileURLWithPath: path, isDirectory: true)
+        guard Self.isDirectory(url) else { return nil }
         saveBookmark(for: url)
         return url
     }
 
-    /// Resolution options to attempt, in order. Plain bookmarks work in this non-sandboxed
-    /// build; the security-scoped variant is kept as a fallback for legacy bookmarks.
+    private static func isDirectory(_ url: URL) -> Bool {
+        var isDirectory = ObjCBool(false)
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
+    static func legacyDocumentsRelativePath(_ path: String) -> String? {
+        let parts = URL(fileURLWithPath: path).standardizedFileURL.pathComponents
+        guard let containers = parts.firstIndex(of: "Containers"),
+              parts.count > containers + 4,
+              parts[containers + 1] == "Data", parts[containers + 2] == "Application",
+              UUID(uuidString: parts[containers + 3]) != nil,
+              parts[containers + 4] == "Documents" else { return nil }
+        return parts.dropFirst(containers + 5).joined(separator: "/")
+    }
+
+    static func documentsVaultURL(relativePath: String, documents: URL) -> URL? {
+        guard !relativePath.hasPrefix("/"),
+              !relativePath.split(separator: "/").contains("..") else { return nil }
+        guard !relativePath.isEmpty else { return documents.standardizedFileURL }
+        return documents.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL
+    }
+
     private var bookmarkResolutionOptionSets: [URL.BookmarkResolutionOptions] {
         #if os(macOS)
-        return [[], [.withSecurityScope]]
+        return [[.withSecurityScope, .withoutUI], [.withoutUI]]
         #else
-        return [[]]
+        return [[.withoutUI]]
         #endif
     }
 
     private func saveBookmark(for url: URL) {
-        // Non-sandboxed macOS uses plain bookmarks (no security scope needed).
-        if let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
-            defaults.set(data, forKey: Keys.bookmark)
+        #if os(macOS)
+        let data = (try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil))
+            ?? (try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil))
+        #else
+        let data = try? url.bookmarkData(options: [.minimalBookmark], includingResourceValuesForKeys: nil, relativeTo: nil)
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        if path == documents || path.hasPrefix(documents + "/") {
+            defaults.set(path == documents ? "" : String(path.dropFirst(documents.count + 1)),
+                         forKey: Keys.documentsRelativePath)
+        } else {
+            defaults.removeObject(forKey: Keys.documentsRelativePath)
         }
+        #endif
+        // A failed bookmark must not leave the previous vault's bookmark behind.
+        if let data { defaults.set(data, forKey: Keys.bookmark) }
+        else { defaults.removeObject(forKey: Keys.bookmark) }
         defaults.set(url.path, forKey: Keys.lastPath)
+        defaults.set(true, forKey: Keys.onboarded)
     }
 
     private func stopAccessing() {

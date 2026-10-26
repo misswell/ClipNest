@@ -59,6 +59,7 @@ struct RootView: View {
             } message: {
                 Text(captureCoordinator.errorMessage ?? String(localized: "Unknown error"))
             }
+            .task { await store.restoreVaultWithRetries() }
             .task {
                 await captureCoordinator.start()
                 search.attach(vaultRoot: store.rootURL)
@@ -72,6 +73,7 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
+                store.restoreVaultIfNeeded()
                 // Warm the on-device model *before* the capture asks for it.
                 //
                 // Coming back from another app is exactly when this app's clipboard workflow

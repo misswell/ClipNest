@@ -100,7 +100,7 @@ enum AppIconManager {
     }
 
     private static func macIcon(named name: String) -> NSImage? {
-        NSImage(named: name) ?? launchIcon
+        NSImage(named: name + "Mac") ?? launchIcon
     }
     #endif
 }
